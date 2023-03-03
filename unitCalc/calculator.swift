@@ -642,7 +642,7 @@ class calculator:ObservableObject {
                         for (indexTo,currencyTo) in self.currencyCode.enumerated() {
                             if indexFrom < indexTo {    //只查一半的表格，另一半就是係數顛倒，所以直接填入
                                 if indexFrom == 0 {
-                                    self.currency[0][indexFrom][indexTo].f1 = self.parsingBot(downloadedData,code: currencyTo).spotSelling
+                                    self.currency[0][indexFrom][indexTo].f1 = self.parsingBot(downloadedData,code: currencyTo).cashSelling
                                     self.currency[0][indexTo][indexFrom].f0 = self.currency[0][indexFrom][indexTo].f1
                                 } else {
                                     self.currency[0][indexFrom][indexTo].f1 = self.currency[0][0][indexTo].f1   //以下皆以對台幣的價格帶入，以維持換算係數的一致

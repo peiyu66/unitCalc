@@ -89,7 +89,6 @@ struct ContentView: View {
                             .minimumScaleFactor(calc.cgByClass([0.5]))
                             .padding(.horizontal)
                             .lineLimit(1)
-                        
                         Spacer()
                     }
                     .frame(width:g.size.width, height: (g.size.height - pickerHeight) * ratioMemory, alignment: .bottomLeading)

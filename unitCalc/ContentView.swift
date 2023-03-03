@@ -144,7 +144,6 @@ struct buttons: View {
             VStack {
                 ForEach(bLabel, id:\.self){ row in
                     HStack{
-                        Spacer()
                         ForEach(row, id:\.self) { labelText in
                             let narrowWidth:Bool = labelText.count > 1 || calc.opBasic[labelText] != nil || labelText == "=" || calc.power10[labelText] != nil
                             let fontSize = vh * (narrowWidth ? calc.cgByClass([0.8,0.6]) : 1)
@@ -170,7 +169,6 @@ struct buttons: View {
                                 || (calc.valueMemory == nil && (labelText == "mc" || labelText == "mr"))
                                 || ((calc.outputText(calc.valueCurrent).count >= calc.outputLength || calc.textCurrent.count >= calc.sigfig) && calc.valueInput != nil && calc.digits.contains(labelText)))
                         }
-                        Spacer()
                     }
                 }   //ForEach
             }   //VStack

@@ -189,6 +189,9 @@ class calculator:ObservableObject {
             textCurrent = outputText(valueCurrent)
             
         case "+","-","*","/","=":
+            if key == "=" && (valueOperant == 0 && valueCurrent == 0 || valueOperant == valueCurrent) && (textOperator == "" || textOperator == "=")  && valueInput == nil {
+                break
+            }
             let vOperant = valueOperant
             switch textOperator {
             case "+":

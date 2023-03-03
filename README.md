@@ -1,5 +1,6 @@
 # 小確幸度量計算機
 
+[[github-repository]](https://github.com/peiyu66/unitCalc)
 [[github-pages]](https://peiyu66.github.io/unitCalc/)
 
 ## 換算種類

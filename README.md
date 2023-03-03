@@ -1,7 +1,8 @@
 # 小確幸度量計算機
 
-* [[github-repository]](https://github.com/peiyu66/unitCalc)
-* [[github-pages]](https://peiyu66.github.io/unitCalc/)
+* [github-repository](https://github.com/peiyu66/unitCalc)
+* [github-pages](https://peiyu66.github.io/unitCalc/)
+* [Privacy Policy 隱私權政策](https://peiyu66.github.io/unitCalc/docs/PrivacyPolicy.html)
 
 ## 換算種類
 

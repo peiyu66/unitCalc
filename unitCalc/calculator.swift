@@ -77,7 +77,7 @@ class calculator:ObservableObject {
             } else {
                 wClass = .widePhone
             }
-        } else {
+        } else if UIDevice.current.orientation.isPortrait {
             if isPad {
                 wClass = .regularPad
             } else if hClass == .regular {
@@ -85,6 +85,8 @@ class calculator:ObservableObject {
             } else {
                 wClass = .compact
             }
+        } else {
+            wClass = widthClass
         }
         NSLog("widthClass:\(wClass)")
         return wClass
@@ -113,8 +115,8 @@ class calculator:ObservableObject {
             self.versionLast = UserDefaults.standard.string(forKey: "simStockVersion") ?? ""
             UserDefaults.standard.set(versionNow, forKey: "simStockVersion")
             if versionLast != versionNow {
-//                let lastNo = (versionLast == "" ? "" : versionLast.split(separator: ".")[0])
-//                let thisNo = versionNow.split(separator: ".")[0]
+                defaults.removeObject(forKey: "currencyTime")
+                defaults.removeObject(forKey: "currencyRate")
                 NSLog("version: \(versionLast) → \(versionNow)")
             }
             widthClass = deviceWidthClass
@@ -309,6 +311,7 @@ class calculator:ObservableObject {
                 valueMemory = nil
                 opLog = []
                 textLastKey = ""
+                UIPasteboard.general.string = nil
             }
             while let last = opLog.last, last.key != "=" && last.type == "op" {
                 opLog.removeLast()
@@ -412,7 +415,7 @@ class calculator:ObservableObject {
 
         }
         
-        let leading:Int = Int(cgByClass([250,150,60]))
+        let leading:Int = Int(cgByClass([250,200,60]))
         if text.count < leading { //讓自動捲動不會因為字數少不用捲而停擺
             text = repeatElement(" ", count: leading - text.count ) + text
         }
@@ -424,7 +427,7 @@ class calculator:ObservableObject {
     //單位換算
     
     let units:[String:[String]] =  [
-        "貨幣":["台幣","美元","日圓","歐元","英鎊","越南盾","港幣","韓元","人民幣"],
+        "貨幣":["台幣","美元","日圓","歐元","英鎊","韓元","越南盾","港幣","人民幣"],
         "重量":["公克","公斤","台斤","台兩","英磅","盎司"],
         "長度":["公尺","公分","台尺","台寸","英尺","英寸"],
         "面積":["台坪","台畝","台分","台甲","m²","公頃","ft²"],
@@ -507,7 +510,7 @@ class calculator:ObservableObject {
     }
 
     var currencySource:String = "台灣銀行" //BOT, Bank of Taiwan
-    let currencyCode:([String]) = ["TWD","USD","JPY","EUR","GBP","VND","HKD","KRW","CNY"] //這是Yahoo的查詢代碼
+    let currencyCode:([String]) = ["TWD","USD","JPY","EUR","GBP","KRW","VND","HKD","CNY"]
     var currencyTime:Date?  //最後成功取得全部匯率的時間
 
     //轉換係數：為了精度所以使用雙係數。例如3公斤=5台斤，則2公斤=2*5/3台斤。

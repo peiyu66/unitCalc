@@ -13,6 +13,7 @@ struct ContentView: View {
     @State var cat:String
     @State var unit:String
     @State var catChangingUnit:Bool = false
+    @State var nilPasteBoard:Bool = true
 
     var textMemory:String {
         if let m = calc.valueMemory {
@@ -52,12 +53,10 @@ struct ContentView: View {
                         ScrollViewReader { proxy in
                             ScrollView(.horizontal, showsIndicators: false) {
                                 HStack {
-                                    Spacer()
                                     Text(calc.logText)
                                         .foregroundColor(Color(.darkGray))
                                         .font(.system(size: (g.size.height - pickerHeight) * ratioLog))
                                         .minimumScaleFactor(calc.cgByClass([0.5]))
-                                        .padding(.horizontal)
                                         .lineLimit(1)
                                         .id("logText")
                                 }
@@ -69,9 +68,29 @@ struct ContentView: View {
                                 }
                             } //onChange
                         } //ScrollViewReader
+                        if calc.opLog.count > 0 {
+                            Button(action: {
+                                UIPasteboard.general.string = calc.logText.replacingOccurrences(of: " ", with: "")
+                            }, label: {
+                                Image(systemName: nilPasteBoard ? "doc.on.doc" : "doc.on.doc.fill")
+//                                if let ps = UIPasteboard.general.string, ps.count > 0 {
+//                                    Image(systemName:ps = UIPasteboard.general.string, ps.count > 0 ? "doc.on.doc.fill" : "doc.on.doc")
+//                                } else {
+//                                    Image(systemName: "doc.on.doc")
+//                                }
+                            })
+                            .onReceive(NotificationCenter.default.publisher(for: UIPasteboard.changedNotification)) { _ in
+                                if UIPasteboard.general.string == nil {
+                                    nilPasteBoard = true
+                                } else {
+                                    nilPasteBoard = false
+                                }
+                            }
+                        }
                     } //HStack
                     .frame(width:g.size.width, height: (g.size.height - pickerHeight) * ratioLog, alignment: .top)
-                    
+                    .padding(.horizontal)
+
                     HStack { //===== Output =====
                         Spacer()
                         Text(calc.textCurrent)
@@ -160,17 +179,18 @@ struct buttons: View {
                             })
                             .font(.custom("System", size: fontSize))
                             .minimumScaleFactor(0.7)
-                            .frame(width: vw , height: vh, alignment: .center)
+                            .frame(maxHeight: vh * calc.cgByClass([1.25,1]))
+                            .frame(width: vw, alignment: .center)
                             .overlay(RoundedRectangle(cornerRadius: 20)
-                                        .stroke(Color.blue, lineWidth: 1))
+                                .stroke(Color.blue, lineWidth: 1))
                             .disabled((calc.textCurrent.contains(".") && calc.valueInput != nil && labelText == ".")
                                 || (calc.power10[calc.textLastKey] != nil && (calc.power10[labelText] != nil || calc.digits.contains(labelText)))
                                 || (calc.opBasic[calc.textLastKey] != nil && (calc.opBasic[labelText] != nil || calc.opStrong.contains(labelText) || labelText == "="))
                                 || (calc.valueMemory == nil && (labelText == "mc" || labelText == "mr"))
                                 || ((calc.outputText(calc.valueCurrent).count >= calc.outputLength || calc.textCurrent.count >= calc.sigfig) && calc.valueInput != nil && calc.digits.contains(labelText)))
-                        }
-                    }
-                }   //ForEach
+                        } //ForEach in HStack
+                    } //HStack
+                }   //ForEach in VStack
             }   //VStack
             .frame(width: g.size.width, height: g.size.height)
         }

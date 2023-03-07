@@ -1,5 +1,6 @@
 # 小確幸度量計算機
 
+* [在App Store上檢視](https://apps.apple.com/tw/app/unitcalc/id6445979881)
 * [github-repository](https://github.com/peiyu66/unitCalc)
 * [github-pages](https://peiyu66.github.io/unitCalc/)
 * [Privacy Policy 隱私權政策](https://peiyu66.github.io/unitCalc/docs/PrivacyPolicy.html)

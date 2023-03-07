@@ -1,5 +1,6 @@
 # 小確幸度量計算機
 
+* [在App Store上檢視](https://apps.apple.com/tw/app/unitcalc/id6445979881)
 * [github-repository](https://github.com/peiyu66/unitCalc)
 * [github-pages](https://peiyu66.github.io/unitCalc/)
 * [Privacy Policy 隱私權政策](https://peiyu66.github.io/unitCalc/docs/PrivacyPolicy.html)
@@ -11,7 +12,7 @@
 * 重量：公克、公斤、台斤、台兩、英磅、盎司。
 * 長度：公尺、公分、台尺、台寸、英尺、英寸。
 * 面積：台坪、台畝、台分、台甲、m²（平方公尺）、公頃、ft²（平方英尺）。
-* 貨幣：台幣、美元、日圓、歐元、英鎊、越南盾、港幣、韓元、人民幣。
+* 貨幣：台幣、美元、日圓、歐元、英鎊、韓元、越南盾、港幣、人民幣。
 
 ## 截圖
 ### iPad Pro 12.9”

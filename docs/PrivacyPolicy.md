@@ -1,3 +1,11 @@
+unitCalc唯一的對外連線是查詢匯率，既未對外傳送任何訊息，也沒有在本機儲存任何與使用者有關的訊息。
+
+然而，若有任何問題，請e-mail聯絡：
+peiyou.huang@gmail.com
+
+
+因應上架要求，以下為免費線上服務所產生的條文。
+
 [Privacy Policy for unitCalc](https://www.privacypolicies.com/live/6dbe99d6-118c-4890-b09b-02c27eb61a3e)
 
 # Privacy Policy

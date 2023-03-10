@@ -259,37 +259,39 @@ class calculator:ObservableObject {
             }
             
         case "CE":
-            if isEditing {
-                if byUser {
-                    valueCurrent = valueOperant
+            if let lastLog = opLog.last {
+                if isEditing && !opStrong.contains(lastLog.key) {
+                    if byUser {
+                        valueCurrent = valueOperant
+                        textCurrent = outputText(valueCurrent)
+                        valueInput = nil
+                        textLastKey = textOperator
+                    } else {
+                        opLog.append((valueOperant,textOperator,valueInput,unitFrom,
+                                      valueCurrent,textLastKey,valueMemory,"op"))
+                    }
+                    print("isEditing >> vOperant=\(valueOperant), op: \(textOperator), vInput: \(String(describing: valueInput)), key: \(key),  vcurrent=\(valueCurrent), last: \(textLastKey), m=\(String(describing: valueMemory))")
+                } else if lastLog.type == "op" {
+                    valueCurrent = (opStrong.contains(lastLog.key) ? lastLog.vCurrent : (lastLog.vInput ?? 0))
                     textCurrent = outputText(valueCurrent)
-                    valueInput = nil
-                    textLastKey = textOperator
-                } else {
-                    opLog.append((valueOperant,textOperator,valueInput,unitFrom,
-                                  valueCurrent,textLastKey,valueMemory,"op"))
+                    valueOperant = lastLog.vOperant
+                    textOperator = lastLog.tOperator
+                    valueInput = (opStrong.contains(lastLog.key) ? lastLog.vCurrent : lastLog.vInput)
+                    textLastKey = lastLog.tLastKey
+                    opLog.removeLast()
+                    
+                    //                if byUser {
+                    //                    //更進一步回復到前運算子之後
+                    //                    valueCurrent = valueOperant
+                    //                    if opStrong.contains(lastLog.key) {
+                    //                        textCurrent = outputText(lastLog.vOperant)
+                    //                    } else {
+                    //                        textCurrent = outputText(valueCurrent)
+                    //                    }
+                    //                    valueInput = nil
+                    //                    textLastKey = lastLog.tOperator
+                    //                }
                 }
-                print("isEditing >> vOperant=\(valueOperant), op: \(textOperator), vInput: \(String(describing: valueInput)), key: \(key),  vcurrent=\(valueCurrent), last: \(textLastKey), m=\(String(describing: valueMemory))")
-            } else if let lastLog = opLog.last, lastLog.type == "op" {
-                valueCurrent = lastLog.vInput ?? 0 //
-                textCurrent = outputText(valueCurrent)
-                valueOperant = lastLog.vOperant
-                textOperator = lastLog.tOperator
-                valueInput = nil //lastLog.vInput //
-                textLastKey = lastLog.tLastKey //
-                opLog.removeLast()
-
-//                if byUser {
-//                    //更進一步回復到前運算子之後
-//                    valueCurrent = valueOperant
-//                    if opStrong.contains(lastLog.key) {
-//                        textCurrent = outputText(lastLog.vOperant)
-//                    } else {
-//                        textCurrent = outputText(valueCurrent)
-//                    }
-//                    valueInput = nil
-//                    textLastKey = lastLog.tOperator
-//                }
             } else if byUser {
                 valueInput = nil
                 valueOperant = 0

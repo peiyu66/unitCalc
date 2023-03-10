@@ -61,6 +61,7 @@ struct ContentView: View {
                                         .id("logText")
                                 }
                                 .frame(minWidth: g.size.width, alignment: .trailing)
+                                Spacer()
                             } //ScrollView
                             .onChange(of: calc.logText) {_ in
                                 withAnimation {

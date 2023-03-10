@@ -17,7 +17,7 @@ struct ContentView: View {
 
     var textMemory:String {
         if let m = calc.valueMemory {
-            return "m = " + calc.outputText(m)
+            return " m = " + calc.outputText(m)
         } else {
             return ""
         }
@@ -44,8 +44,8 @@ struct ContentView: View {
                 .padding(.bottom, calc.cgByClass([4,8]))
                 
                 let ratioDisplay:CGFloat = calc.cgByClass([1.6]) / 5
-                let ratioLog:CGFloat = ratioDisplay * calc.cgByClass([0.9,0.7]) / 5
-                let ratioOutput:CGFloat = ratioDisplay * calc.cgByClass([2.9,3.3]) / 5
+                let ratioLog:CGFloat = ratioDisplay * calc.cgByClass([0.8,0.7]) / 5
+                let ratioOutput:CGFloat = ratioDisplay * calc.cgByClass([3,3.3]) / 5
                 let ratioMemory:CGFloat = ratioDisplay * calc.cgByClass([1.2,1]) / 5
                 let ratioButtom:CGFloat = calc.cgByClass([3.4]) / 5
                 VStack (spacing:0) { //輸出區
@@ -56,7 +56,7 @@ struct ContentView: View {
                                     Text(calc.logText)
                                         .foregroundColor(Color(.darkGray))
                                         .font(.system(size: (g.size.height - pickerHeight) * ratioLog))
-                                        .minimumScaleFactor(calc.cgByClass([0.5]))
+                                        .minimumScaleFactor(calc.cgByClass([1,0.8]))
                                         .lineLimit(1)
                                         .id("logText")
                                 }
@@ -73,11 +73,6 @@ struct ContentView: View {
                                 UIPasteboard.general.string = calc.logText.replacingOccurrences(of: " ", with: "")
                             }, label: {
                                 Image(systemName: nilPasteBoard ? "doc.on.doc" : "doc.on.doc.fill")
-//                                if let ps = UIPasteboard.general.string, ps.count > 0 {
-//                                    Image(systemName:ps = UIPasteboard.general.string, ps.count > 0 ? "doc.on.doc.fill" : "doc.on.doc")
-//                                } else {
-//                                    Image(systemName: "doc.on.doc")
-//                                }
                             })
                             .onReceive(NotificationCenter.default.publisher(for: UIPasteboard.changedNotification)) { _ in
                                 if UIPasteboard.general.string == nil {
@@ -93,7 +88,7 @@ struct ContentView: View {
 
                     HStack { //===== Output =====
                         Spacer()
-                        Text(calc.textCurrent)
+                        Text(calc.textCurrent + (calc.widthClass == .widePhone ? " " : ""))
                             .font(.custom("System", size: (g.size.height - pickerHeight)  * ratioOutput))
                             .minimumScaleFactor(calc.cgByClass([0.4,0.3]))
                             .lineLimit(1)
@@ -105,7 +100,7 @@ struct ContentView: View {
                         Text(textMemory)
                             .foregroundColor(Color.brown)
                             .font(.system(size: (g.size.height - pickerHeight) * ratioMemory))
-                            .minimumScaleFactor(calc.cgByClass([0.5]))
+                            .minimumScaleFactor(calc.cgByClass([1,0.8]))
                             .padding(.horizontal)
                             .lineLimit(1)
                         Spacer()

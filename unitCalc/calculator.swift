@@ -314,6 +314,7 @@ class calculator:ObservableObject {
                 opLog = []
                 textLastKey = ""
                 UIPasteboard.general.string = nil
+                logCurrencyTime = nil
             }
             while let last = opLog.last, last.key != "=" && last.type == "op" {
                 opLog.removeLast()
@@ -457,6 +458,7 @@ class calculator:ObservableObject {
     var catFromIndex:Int = 0
     var unitIndex:Int = 0
     var unitFromIndex:Int = 0
+    var logCurrencyTime:Date?
 
     func unitConvert(pickerCat:String, pickerUnit:String) {
         if let u = units[pickerCat], u.contains(pickerUnit) && pickerUnit != unit {
@@ -500,7 +502,20 @@ class calculator:ObservableObject {
                     }
                 } else {
                     textOperator = catFrom
-                    opLog.append((valueOperant,catFrom,valueInput,cat,
+                    var k:String = cat
+                    if let t = currencyTime, cat == "貨幣", t != logCurrencyTime  {
+                        func formatter(_ format:String="yyyy/MM/dd") -> DateFormatter  {
+                            let formatter = DateFormatter()
+                            formatter.locale = Locale(identifier: "zh_Hant_TW")
+                            formatter.timeZone = TimeZone(identifier: "Asia/Taipei")!
+                            formatter.dateFormat = format
+                            return formatter
+                        }
+                        let dt = formatter("M月d日H時m分").string(from: t)
+                        k = "\(cat)(\(dt))"
+                        logCurrencyTime = t
+                    }
+                    opLog.append((valueOperant,catFrom,valueInput,k,
                                   valueCurrent,textLastKey,valueMemory,"cat"))
                     textOperator = unit
                     print(opLog.last.debugDescription)
@@ -581,8 +596,8 @@ class calculator:ObservableObject {
             }
         }
         factors = currency + metric
-        if let dt = currencyTime, dt.timeIntervalSinceNow > -86400 {
-            return //上次查詢匯率還沒超過24小時
+        if let dt = currencyTime, dt.timeIntervalSinceNow > -14400 {
+            return //上次查詢匯率還沒超過4小時
         }
         queryBot()  //還沒成功查過就重試查詢匯率
     }

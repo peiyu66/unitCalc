@@ -161,7 +161,7 @@ struct buttons: View {
                     HStack{
                         ForEach(row, id:\.self) { labelText in
                             let narrowWidth:Bool = labelText.count > 1 || calc.opBasic[labelText] != nil || labelText == "=" || calc.power10[labelText] != nil
-                            let fontSize = vh * (narrowWidth ? calc.cgByClass([0.8,0.6]) : 1)
+                            let fontSize = vh * (narrowWidth ? calc.cgByClass([0.8,0.6,0.6,0.6,0.555]) : 1)
                             Button(action: {
                                 calc.keyin(labelText,  byUser: true)
                             }, label: {

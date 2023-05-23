@@ -697,7 +697,7 @@ class calculator:ObservableObject {
             selling = "Selling"
         }
         let leading = "\(code)         \(buying)"
-        let trailing = "\r"
+        let trailing = "\r\n"
         if let range=data.range(of: "\(leading)(.+)\(trailing)", options: .regularExpression) {
             let startIndex = data.index(range.lowerBound, offsetBy: leading.count)
             let endIndex = data.index(range.upperBound, offsetBy: 0-trailing.count)

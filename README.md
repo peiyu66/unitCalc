@@ -1,5 +1,7 @@
 # 小確幸度量計算機
 
+小確幸度量計算機：四則運算及台灣常用度量單位換算。
+
 * [在App Store上檢視](https://apps.apple.com/tw/app/unitcalc/id6445979881)
 * [Privacy Policy 隱私權政策](https://peiyu66.github.io/unitCalc/docs/PrivacyPolicy.html)
 * [github-repository](https://github.com/peiyu66/unitCalc)

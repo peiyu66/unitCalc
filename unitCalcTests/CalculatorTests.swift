@@ -58,6 +58,179 @@ final class CalculatorTests: XCTestCase {
         XCTAssertEqual(calculator.valueCurrent, 1000, accuracy: 1e-9)
     }
 
+    func testWeightConversionsMatchReferenceValues() {
+        let references: [(unit: String, grams: Double)] = [
+            ("公斤", 1_000),
+            ("台斤", 600),
+            ("台兩", 37.5),
+            ("英磅", 453.59237),
+            ("盎司", 28.349523125)
+        ]
+
+        for reference in references {
+            assertConversion(
+                1,
+                category: "重量",
+                from: reference.unit,
+                to: "公克",
+                equals: reference.grams
+            )
+            assertConversion(
+                reference.grams,
+                category: "重量",
+                from: "公克",
+                to: reference.unit,
+                equals: 1
+            )
+        }
+    }
+
+    func testLengthConversionsMatchReferenceValues() {
+        let references: [(unit: String, meters: Double)] = [
+            ("公分", 0.01),
+            ("台尺", 10.0 / 33.0),
+            ("台寸", 1.0 / 33.0),
+            ("英尺", 0.3048),
+            ("英寸", 0.0254)
+        ]
+
+        for reference in references {
+            assertConversion(
+                1,
+                category: "長度",
+                from: reference.unit,
+                to: "公尺",
+                equals: reference.meters
+            )
+            assertConversion(
+                reference.meters,
+                category: "長度",
+                from: "公尺",
+                to: reference.unit,
+                equals: 1
+            )
+        }
+    }
+
+    func testAreaConversionsMatchReferenceValues() {
+        let references: [(unit: String, squareMeters: Double)] = [
+            ("台坪", 400.0 / 121.0),
+            ("台畝", 12_000.0 / 121.0),
+            ("台分", 117_360.0 / 121.0),
+            ("台甲", 1_173_600.0 / 121.0),
+            ("公頃", 10_000),
+            ("ft²", 0.09290304)
+        ]
+
+        for reference in references {
+            assertConversion(
+                1,
+                category: "面積",
+                from: reference.unit,
+                to: "m²",
+                equals: reference.squareMeters
+            )
+            assertConversion(
+                reference.squareMeters,
+                category: "面積",
+                from: "m²",
+                to: reference.unit,
+                equals: 1
+            )
+        }
+    }
+
+    func testEveryStaticConversionPairMatchesReferenceValues() throws {
+        let referenceValues: [String: [String: Double]] = [
+            "重量": [
+                "公克": 1,
+                "公斤": 1_000,
+                "台斤": 600,
+                "台兩": 37.5,
+                "英磅": 453.59237,
+                "盎司": 28.349523125
+            ],
+            "長度": [
+                "公尺": 1,
+                "公分": 0.01,
+                "台尺": 10.0 / 33.0,
+                "台寸": 1.0 / 33.0,
+                "英尺": 0.3048,
+                "英寸": 0.0254
+            ],
+            "面積": [
+                "台坪": 400.0 / 121.0,
+                "台畝": 12_000.0 / 121.0,
+                "台分": 117_360.0 / 121.0,
+                "台甲": 1_173_600.0 / 121.0,
+                "m²": 1,
+                "公頃": 10_000,
+                "ft²": 0.09290304
+            ]
+        ]
+        let sample = 123.456789
+
+        for (category, units) in referenceValues {
+            for (source, sourceValue) in units {
+                for (destination, destinationValue) in units where destination != source {
+                    let converted = convert(
+                        sample,
+                        category: category,
+                        from: source,
+                        to: destination
+                    )
+                    let expected = sample * sourceValue / destinationValue
+                    XCTAssertEqual(
+                        converted,
+                        expected,
+                        accuracy: relativeAccuracy(for: expected),
+                        "\(category)：\(source) → \(destination) 與基準值不一致"
+                    )
+                }
+            }
+        }
+    }
+
+    func testCurrencyFixtureConvertsEveryPairAtCashSellingRates() throws {
+        let calculator = makeCalculator()
+        calculator.currency = try calculator.makeCurrencyMatrix(from: Self.bankOfTaiwanFixture)
+        calculator.factors = calculator.currency + calculator.metric
+        let currencies = try XCTUnwrap(calculator.units["貨幣"])
+        let twdValues: [String: Double] = [
+            "台幣": 1,
+            "美元": 31.88,
+            "日圓": 0.20110,
+            "歐元": 37.14,
+            "英鎊": 43.71,
+            "韓元": 0.02511,
+            "越南盾": 0.00138,
+            "港幣": 4.08,
+            "人民幣": 4.763
+        ]
+        let sample = 12_345.6789
+
+        for source in currencies {
+            for destination in currencies where destination != source {
+                let sourceValue = try XCTUnwrap(twdValues[source])
+                let destinationValue = try XCTUnwrap(twdValues[destination])
+                let converted = convert(
+                    sample,
+                    category: "貨幣",
+                    from: source,
+                    to: destination,
+                    calculator: calculator
+                )
+                let expected = sample * sourceValue / destinationValue
+                XCTAssertEqual(
+                    converted,
+                    expected,
+                    accuracy: relativeAccuracy(for: expected),
+                    "貨幣：\(source) → \(destination) 與牌告賣出匯率不一致"
+                )
+            }
+        }
+    }
+
     func testBOTParserUsesNamedColumnsInsteadOfFixedSpacing() throws {
         let calculator = makeCalculator()
         let fixture = """
@@ -214,6 +387,46 @@ final class CalculatorTests: XCTestCase {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [URLProtocolStub.self]
         return URLSession(configuration: configuration)
+    }
+
+    private func assertConversion(
+        _ value: Double,
+        category: String,
+        from source: String,
+        to destination: String,
+        equals expected: Double,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let result = convert(value, category: category, from: source, to: destination)
+        XCTAssertEqual(
+            result,
+            expected,
+            accuracy: relativeAccuracy(for: expected),
+            "\(category)：\(value) \(source) → \(destination)",
+            file: file,
+            line: line
+        )
+    }
+
+    private func convert(
+        _ value: Double,
+        category: String,
+        from source: String,
+        to destination: String,
+        calculator: Calculator? = nil
+    ) -> Double {
+        let calculator = calculator ?? makeCalculator()
+        calculator.unitConvert(pickerCat: category, pickerUnit: source)
+        calculator.valueCurrent = value
+        calculator.valueInput = value
+        calculator.textCurrent = calculator.outputText(value)
+        calculator.unitConvert(pickerCat: category, pickerUnit: destination)
+        return calculator.valueCurrent
+    }
+
+    private func relativeAccuracy(for expected: Double) -> Double {
+        max(abs(expected) * 1e-10, 1e-10)
     }
 
     private func identityCurrencyMatrix() -> [[[Calculator.p]]] {

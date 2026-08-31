@@ -42,9 +42,9 @@ unitCalc 不需要帳號，也不使用廣告、分析或追蹤服務。App 僅�
   <img src="docs/images/unitcalc-v1.1.0-b1-iphone-13-mini-landscape.png" alt="unitCalc 1.1.0 (1) 在 iPhone 13 mini 的橫向畫面" width="520">
 </p>
 
-### iPad
+### iPad（約 10 吋）
 
 <p>
   <img src="docs/images/unitcalc-v1.1.0-b1-ipad-10-inch-portrait.png" alt="unitCalc 1.1.0 (1) 在約 10 吋 iPad 的直向畫面" width="360">
-  <img src="docs/images/unitcalc-v1.1.0-b1-ipad-13-inch-portrait.png" alt="unitCalc 1.1.0 (1) 在 13 吋 iPad 的直向畫面" width="360">
+  <img src="docs/images/unitcalc-v1.1.0-b1-ipad-10-inch-ios26.5-landscape.png" alt="unitCalc 1.1.0 (1) 在約 10 吋 iPad 的橫向畫面" width="520">
 </p>

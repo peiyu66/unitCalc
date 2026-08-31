@@ -46,6 +46,100 @@ final class CalculatorTests: XCTestCase {
         XCTAssertEqual(calculator.outputText(1.0 / 3.0), "0.3333333333333")
     }
 
+    func testKeyEnablementGuardsInvalidSequences() {
+        let calculator = makeCalculator()
+
+        XCTAssertFalse(calculator.isKeyEnabled("mc"))
+        XCTAssertFalse(calculator.isKeyEnabled("mr"))
+
+        press(["1", ".", "2"], on: calculator)
+        XCTAssertFalse(calculator.isKeyEnabled("."))
+
+        calculator.keyin("百萬", byUser: true)
+        XCTAssertFalse(calculator.isKeyEnabled("2"))
+        XCTAssertFalse(calculator.isKeyEnabled("十萬"))
+
+        calculator.keyin("C", byUser: true)
+        press(["4", "+"], on: calculator)
+        XCTAssertFalse(calculator.isKeyEnabled("*"))
+        XCTAssertFalse(calculator.isKeyEnabled("√"))
+        XCTAssertFalse(calculator.isKeyEnabled("="))
+
+        calculator.textCurrent = String(repeating: "1", count: 13)
+        calculator.valueCurrent = 1
+        calculator.valueInput = 1
+        calculator.textLastKey = "1"
+        XCTAssertFalse(calculator.isKeyEnabled("2"))
+    }
+
+    func testPowerOfTenShortcutsStartAndScaleValues() {
+        let calculator = makeCalculator()
+
+        calculator.keyin("十萬", byUser: true)
+        XCTAssertEqual(calculator.valueCurrent, 100_000, accuracy: 1e-12)
+        XCTAssertEqual(calculator.textCurrent, "100,000")
+
+        calculator.keyin("C", byUser: true)
+        press(["2", "百萬"], on: calculator)
+        XCTAssertEqual(calculator.valueCurrent, 2_000_000, accuracy: 1e-12)
+        XCTAssertEqual(calculator.textCurrent, "2,000,000")
+    }
+
+    func testMemoryRecallClearAndDoubleClearBehavior() {
+        let calculator = makeCalculator()
+
+        press(["2", "+", "3", "=", "ms", "C"], on: calculator)
+        XCTAssertEqual(calculator.valueMemory, 5)
+        XCTAssertTrue(calculator.hasHistory)
+
+        calculator.keyin("mr", byUser: true)
+        XCTAssertEqual(calculator.valueCurrent, 5, accuracy: 1e-12)
+        XCTAssertEqual(calculator.textCurrent, "5")
+
+        calculator.keyin("C", byUser: true)
+        calculator.keyin("C", byUser: true)
+        XCTAssertNil(calculator.valueMemory)
+        XCTAssertFalse(calculator.hasHistory)
+        XCTAssertEqual(calculator.textCurrent, "0")
+    }
+
+    func testClearEntryRestoresPriorOperation() {
+        let calculator = makeCalculator()
+
+        press(["5", "+", "3", "="], on: calculator)
+        XCTAssertEqual(calculator.valueCurrent, 8, accuracy: 1e-12)
+
+        calculator.keyin("CE", byUser: true)
+        XCTAssertEqual(calculator.valueCurrent, 3, accuracy: 1e-12)
+        XCTAssertEqual(calculator.valueOperant, 5, accuracy: 1e-12)
+        XCTAssertEqual(calculator.textOperator, "+")
+
+        calculator.keyin("CE", byUser: true)
+        XCTAssertEqual(calculator.valueCurrent, 5, accuracy: 1e-12)
+        XCTAssertNil(calculator.valueInput)
+
+        let freshCalculator = makeCalculator()
+        press(["9", "CE"], on: freshCalculator)
+        XCTAssertEqual(freshCalculator.valueCurrent, 0, accuracy: 1e-12)
+        XCTAssertEqual(freshCalculator.textCurrent, "0")
+    }
+
+    func testUnaryPowerAndRootOperations() {
+        let calculator = makeCalculator()
+
+        press(["3", "x³"], on: calculator)
+        XCTAssertEqual(calculator.valueCurrent, 27, accuracy: 1e-12)
+
+        calculator.keyin("∛", byUser: true)
+        XCTAssertEqual(calculator.valueCurrent, 3, accuracy: 1e-12)
+
+        calculator.keyin("x²", byUser: true)
+        XCTAssertEqual(calculator.valueCurrent, 9, accuracy: 1e-12)
+
+        calculator.keyin("√", byUser: true)
+        XCTAssertEqual(calculator.valueCurrent, 3, accuracy: 1e-12)
+    }
+
     func testWeightConversionRoundTrip() {
         let calculator = makeCalculator()
         calculator.unitConvert(pickerCat: "重量", pickerUnit: "公克")
@@ -189,6 +283,36 @@ final class CalculatorTests: XCTestCase {
                 }
             }
         }
+    }
+
+    func testCrossCategorySwitchPreservesValueAndRecordsTransition() {
+        let calculator = makeCalculator()
+        calculator.unitConvert(pickerCat: "重量", pickerUnit: "公斤")
+        press(["2"], on: calculator)
+
+        calculator.unitConvert(pickerCat: "面積", pickerUnit: "m²")
+
+        XCTAssertEqual(calculator.valueCurrent, 2, accuracy: 1e-12)
+        XCTAssertEqual(calculator.cat, "面積")
+        XCTAssertEqual(calculator.unit, "m²")
+        XCTAssertEqual(calculator.logText, "2公斤; 重量→面積")
+    }
+
+    func testZeroAndInvalidUnitSelectionsAreSafe() {
+        let calculator = makeCalculator()
+        calculator.unitConvert(pickerCat: "重量", pickerUnit: "公克")
+
+        calculator.unitConvert(pickerCat: "重量", pickerUnit: "公斤")
+        XCTAssertEqual(calculator.valueCurrent, 0, accuracy: 1e-12)
+        XCTAssertEqual(calculator.textCurrent, "0")
+        XCTAssertEqual(calculator.unit, "公斤")
+        XCTAssertFalse(calculator.hasHistory)
+
+        calculator.unitConvert(pickerCat: "未知", pickerUnit: "公尺")
+        calculator.unitConvert(pickerCat: "長度", pickerUnit: "未知")
+        XCTAssertEqual(calculator.cat, "重量")
+        XCTAssertEqual(calculator.unit, "公斤")
+        XCTAssertEqual(calculator.valueCurrent, 0, accuracy: 1e-12)
     }
 
     func testCurrencyFixtureConvertsEveryPairAtCashSellingRates() throws {
@@ -373,6 +497,43 @@ final class CalculatorTests: XCTestCase {
         XCTAssertNotNil(calculator.currencyErrorDescription)
         XCTAssertTrue(calculator.currencyErrorDescription?.contains("臺灣銀行") == true)
         XCTAssertTrue(calculator.currencyErrorDescription?.contains("中央銀行") == true)
+    }
+
+    func testCorruptCacheIsReplacedAndPersisted() async throws {
+        let defaults = makeDefaults()
+        defaults.set(Date(), forKey: "currencyTime")
+        defaults.set("損毀快取", forKey: "currencySource")
+        defaults.set(Data([0xFF]), forKey: "currencyRate")
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_TW")
+        formatter.timeZone = TimeZone(identifier: "Asia/Taipei")
+        formatter.dateFormat = "yyyy/MM/dd HH:mm"
+        let timestamp = formatter.string(from: Date())
+
+        URLProtocolStub.handler = { request in
+            if request.url?.path.contains("/fltxt/") == true {
+                return .text(Self.bankOfTaiwanFixture)
+            }
+            return .text("最新掛牌時間：<span class=\"time\">\(timestamp)</span>")
+        }
+        defer { URLProtocolStub.handler = nil }
+
+        let calculator = Calculator(defaults: defaults, session: makeStubSession())
+        await calculator.activate()
+
+        XCTAssertEqual(calculator.currencySource, "台灣銀行")
+        XCTAssertNil(calculator.currencyErrorDescription)
+        XCTAssertTrue(calculator.isValidCurrencyMatrix(calculator.currency))
+        XCTAssertNotNil(defaults.data(forKey: "currencyRate"))
+
+        URLProtocolStub.handler = { _ in throw URLError(.notConnectedToInternet) }
+        let restored = Calculator(defaults: defaults, session: makeStubSession())
+        await restored.activate()
+
+        XCTAssertEqual(restored.currencySource, "台灣銀行")
+        XCTAssertNil(restored.currencyErrorDescription)
+        XCTAssertTrue(restored.isValidCurrencyMatrix(restored.currency))
     }
 
     private func makeCalculator() -> Calculator {

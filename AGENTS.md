@@ -85,7 +85,8 @@
 ## Push、Archive 與發布
 
 - unitCalc 的正式發布目標固定為 App Store Connect。Archive／Distribute 時選用 App Store Connect 發行路徑與相符的正式簽章，不選 Ad Hoc、Development、Enterprise 或其他側載方式。
-- App Store Connect 的 Xcode Cloud `Default` workflow 連結 `https://github.com/peiyu66/unitCalc.git`，在 `main` 任意檔案變更時啟動；目前依序執行必要的 iOS Test（`unitCalc` scheme 設定、建議的 iPhone、所選 Xcode 的最新 iOS）與 iOS Archive。工作前仍須即時查證 workflow；不要把歷史 build 的成功視為目前測試已執行。
+- App Store Connect 的 Xcode Cloud `Default` workflow 連結 `https://github.com/peiyu66/unitCalc.git`，在 `main` 任意檔案變更時啟動；目前並行執行必要的 iOS Analyze（任何 iOS 裝置）、iOS Test（`unitCalc` scheme 設定、建議的 iPhone、所選 Xcode 的最新 iOS）與 iOS Archive。工作前仍須即時查證 workflow；不要把歷史 build 的成功視為目前分析或測試已執行。
+- App Store Connect 的 Xcode Cloud `Release` workflow 僅設「手動開始」條件（可選任何 branch；PR／tag 未啟用），不會因 GitHub push 自動觸發。它使用乾淨初始環境、限制「管理」／「App 管理」角色編輯，並執行必要的 iOS Analyze、iOS Test 與採 `App Store Connect` 分發準備的 iOS Archive。手動啟動前須核對 branch、marketing version 與 `CFBundleVersion`；啟動、Archive／上傳、綁定 App Store 版本及提交審查仍是不同狀態。
 - 發布前核對 target、scheme、Bundle ID、marketing version、build number、最低系統版本、簽章 team、distribution method 與 Archive 內容。
 - 完整 App Store 流程依序區分：測試完成、Archive 成功、必要的 Validate 成功、上傳成功、App Store Connect 處理並接收 build、metadata 完整、提交審查、通過審查、正式上架。匯出 IPA 不是本專案 App Store 上架的完成條件。
 - 不得以 Archive 成功表示已上傳，也不得以上傳成功表示已提交、通過或上架。

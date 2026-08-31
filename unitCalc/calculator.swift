@@ -6,136 +6,47 @@
 //
 
 import Foundation
-import SwiftUI
 
-class calculator:ObservableObject {
-    let defaults = UserDefaults.standard
+@MainActor
+final class Calculator: ObservableObject {
+    private let defaults: UserDefaults
+    private let session: URLSession
+    private let significantDigits = 13
+    let outputLength = 16
 
-    @Published var widthClass:WidthClass = .compact
-    
-    var versionNow:String
-    var versionLast:String = ""
+    private var didLoadCachedCurrency = false
+    private var isRefreshingCurrency = false
 
-    private let buildNo:String = Bundle.main.infoDictionary!["CFBundleVersion"] as! String
-    private let versionNo:String = Bundle.main.infoDictionary!["CFBundleShortVersionString"] as! String
+    init(defaults: UserDefaults = .standard, session: URLSession? = nil) {
+        self.defaults = defaults
+        self.session = session ?? Self.makeDefaultSession()
+        factors = currency + metric
+    }
 
-    enum WidthClass {
-        case compact
-        case regularPhone
-        case regularPad
-        case widePad
-        case widePhone
+    private static func makeDefaultSession() -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.timeoutIntervalForRequest = 30
+        configuration.timeoutIntervalForResource = 45
+        return URLSession(configuration: configuration)
     }
-    
-    func cgByClass (_ cg:[CGFloat]) -> CGFloat { //[widePhone,widePad,regularPad,regularPhone,compact]
-        switch widthClass {
-        case .widePhone:
-                return cg[0]
-        case .widePad:
-            if let last = cg.last, cg.count < 2 {
-                return last
-            } else {
-                return cg[1]
-            }
-        case .regularPad:
-            if let last = cg.last, cg.count < 3 {
-                return last
-            } else {
-                return cg[2]
-            }
-        case .regularPhone:
-            if let last = cg.last, cg.count < 4 {
-                return last
-            } else {
-                return cg[3]
-            }
-        default: // .compact
-            if let last = cg.last, cg.count < 5 {
-                return last
-            } else {
-                return cg[4]
-            }
-        }
-    }
-    
-    var sigfig:Int {
-        return Int(cgByClass([13,13,11,9]))
-    }
-    
-    var outputLength:Int {
-        return Int(cgByClass([16,16,14,11]))
-    }
-    
-    private var hClass = UITraitCollection.current.horizontalSizeClass
-    private var isPad  = UIDevice.current.userInterfaceIdiom == .pad
 
-    var deviceWidthClass: WidthClass {
-        var wClass:WidthClass
-        if UIDevice.current.orientation.isLandscape {
-            if isPad {
-                wClass = .widePad
-            } else {
-                wClass = .widePhone
-            }
-        } else if UIDevice.current.orientation.isPortrait {
-            if isPad {
-                wClass = .regularPad
-            } else if hClass == .regular {
-                wClass = .regularPhone
-            } else {
-                wClass = .compact
-            }
-        } else {
-            wClass = widthClass
-        }
-        NSLog("widthClass:\(wClass)")
-        return wClass
-    }
-    
-    init() {
-        versionNow = versionNo + (buildNo == "0" ? "" : "(\(buildNo))")
-        widthClass = deviceWidthClass
-        NotificationCenter.default.addObserver(self, selector: #selector(self.setWidthClass), name: UIDevice.orientationDidChangeNotification, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(self.appNotification), name: UIApplication.didBecomeActiveNotification, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(self.appNotification), name: UIApplication.willResignActiveNotification, object: nil)
-    }
-    
-    @objc private func setWidthClass(_ notification: Notification) {
-        widthClass = deviceWidthClass
-        if valueInput == nil {
-            textCurrent = outputText(valueCurrent)
-        }
-    }
-    
-
-    @objc private func appNotification(_ notification: Notification) {
-        switch notification.name {
-        case UIApplication.didBecomeActiveNotification:
-            NSLog ("=== appDidBecomeActive v\(versionNow) ===")
-            self.versionLast = UserDefaults.standard.string(forKey: "simStockVersion") ?? ""
-            UserDefaults.standard.set(versionNow, forKey: "simStockVersion")
-            if versionLast != versionNow {
-                defaults.removeObject(forKey: "currencyTime")
-                defaults.removeObject(forKey: "currencyRate")
-                NSLog("version: \(versionLast) → \(versionNow)")
-            }
-            widthClass = deviceWidthClass
-            loadCurrencyRate()
-            
-        case UIApplication.willResignActiveNotification:
-            NSLog ("=== appWillResignActive ===")
-        default:
-            break
+    func activate() async {
+        if !didLoadCachedCurrency {
+            loadCachedCurrencyRate()
+            didLoadCachedCurrency = true
         }
 
+        await refreshCurrencyRateIfNeeded()
     }
     
     //計算機
     
-    @Published var valueMemory:Double?        //記憶的數字
-    @Published var textCurrent:String = "0"   //組字中的運算元數字，或計算後的輸出數字
-    @Published var textLastKey:String = ""    //前一個按鍵
-    @Published var valueInput:Double?         //等待運算子的當前運算元的值
+    @Published var valueMemory: Double?        //記憶的數字
+    @Published var textCurrent = "0"           //組字中的運算元數字，或計算後的輸出數字
+    @Published var textLastKey = ""            //前一個按鍵
+    @Published var valueInput: Double?          //等待運算子的當前運算元的值
+    @Published private(set) var calculationErrorDescription: String?
     var valueCurrent:Double = 0    //組字中的運算元的值，或計算後的值
     var valueOperant:Double = 0    //組字完成的「前」運算元，或計算後的值作為「前」運算元
     var textOperator:String = ""   //等待「後」運算元的運算子
@@ -159,6 +70,40 @@ class calculator:ObservableObject {
         "/":"÷"]
     let opStrong:[String] = ["∛","√","x²","x³"]
     let digits:String = ".0123456789"
+
+    var hasHistory: Bool {
+        !opLog.isEmpty
+    }
+
+    func isOperator(_ key: String) -> Bool {
+        opBasic[key] != nil || key == "="
+    }
+
+    func isPowerOfTen(_ key: String) -> Bool {
+        power10[key] != nil
+    }
+
+    func isKeyEnabled(_ key: String) -> Bool {
+        if textCurrent.contains("."), valueInput != nil, key == "." {
+            return false
+        }
+        if isPowerOfTen(textLastKey), isPowerOfTen(key) || digits.contains(key) {
+            return false
+        }
+        if opBasic[textLastKey] != nil,
+           opBasic[key] != nil || opStrong.contains(key) || key == "=" {
+            return false
+        }
+        if valueMemory == nil, key == "mc" || key == "mr" {
+            return false
+        }
+        if (outputText(valueCurrent).count >= outputLength || textCurrent.count >= significantDigits),
+           valueInput != nil,
+           digits.contains(key) {
+            return false
+        }
+        return true
+    }
     
 
     var isEditing:Bool {
@@ -166,7 +111,14 @@ class calculator:ObservableObject {
     }
     
     func keyin (_ key:String,byUser:Bool=false) {
-                
+        if calculationErrorDescription != nil {
+            if digits.contains(key) {
+                prepareForNewInputAfterError()
+            } else if key != "C" {
+                return
+            }
+        }
+
         switch key {
         case "0","1","2","3","4","5","6","7","8","9",".":
             if valueInput == nil || textCurrent == "0" { //忽略重複的整數零
@@ -203,6 +155,10 @@ class calculator:ObservableObject {
             case "*":
                 valueOperant *= valueCurrent
             case "/":
+                guard valueCurrent != 0 else {
+                    showCalculationError("無法除以零")
+                    return
+                }
                 valueOperant /= valueCurrent
             default:
                 if let vc = valueInput {
@@ -217,9 +173,6 @@ class calculator:ObservableObject {
                 opLog.append((vOperant,(byUser ? textOperator : unitFrom),valueInput,key,
                               valueCurrent,textLastKey,valueMemory, (byUser ? "op" : "unit")))
             }
-            print(opLog.last.debugDescription)
-            print(">> vOperant=\(valueOperant), op: \(textOperator), vInput: \(String(describing: valueInput)), key: \(key),  vcurrent=\(valueCurrent), last: \(textLastKey), m=\(String(describing: valueMemory))\n")
-
             valueInput = nil
             textOperator = key
             
@@ -231,19 +184,24 @@ class calculator:ObservableObject {
             case "x²":
                 valueInput = pow(valueCurrent,2)
             case "√":
+                guard valueCurrent >= 0 else {
+                    showCalculationError("負數沒有實數平方根")
+                    return
+                }
                 valueInput = sqrt(valueCurrent)
             case "∛":
                 valueInput = cbrt(valueCurrent)
             default:
                 break
             }
+            guard valueInput?.isFinite == true else {
+                showCalculationError("計算結果超出可表示範圍")
+                return
+            }
             opLog.append((valueOperant,textOperator,valueInput,key,
                           valueCurrent,textLastKey,valueMemory, "op"))
             valueCurrent = valueInput ?? 0
             textCurrent = outputText(valueCurrent)
-            print(opLog.last.debugDescription)
-            print(">> vOperant=\(valueOperant), op: \(textOperator), vInput: \(String(describing: valueInput)), key: \(key),  vcurrent=\(valueCurrent), last: \(textLastKey), m=\(String(describing: valueMemory))\n")
-            
         case "ms","mc","mr":
             switch key {
             case "ms":
@@ -270,7 +228,6 @@ class calculator:ObservableObject {
                         opLog.append((valueOperant,textOperator,valueInput,unitFrom,
                                       valueCurrent,textLastKey,valueMemory,"op"))
                     }
-                    print("isEditing >> vOperant=\(valueOperant), op: \(textOperator), vInput: \(String(describing: valueInput)), key: \(key),  vcurrent=\(valueCurrent), last: \(textLastKey), m=\(String(describing: valueMemory))")
                 } else if lastLog.type == "op" {
                     valueCurrent = (opStrong.contains(lastLog.key) ? lastLog.vCurrent : (lastLog.vInput ?? 0))
                     textCurrent = outputText(valueCurrent)
@@ -300,10 +257,8 @@ class calculator:ObservableObject {
                 textCurrent = "0"
                 textLastKey = ""
             }
-            print(">> vOperant=\(valueOperant), op: \(textOperator), vInput: \(String(describing: valueInput)), key: \(key),  vcurrent=\(valueCurrent), last: \(textLastKey), m=\(String(describing: valueMemory))\n")
-
-            
         case "C":
+            calculationErrorDescription = nil
             valueInput = nil
             valueOperant = 0
             textOperator = ""
@@ -313,7 +268,6 @@ class calculator:ObservableObject {
                 valueMemory = nil
                 opLog = []
                 textLastKey = ""
-                UIPasteboard.general.string = nil
                 logCurrencyTime = nil
             }
             while let last = opLog.last, last.key != "=" && last.type == "op" {
@@ -331,23 +285,44 @@ class calculator:ObservableObject {
     }
     
     func outputText(_ value:Double) -> String {
+        guard value.isFinite else { return "錯誤" }
 
-        //let roundScale:Double = pow(Double(10),Double(decimal))
-        //let roundedValue:Double = round(value * roundScale) / roundScale)
-        
-        let eOutput = String(format:"%.\(sigfig)g",value)
+        let eOutput = String(format:"%.\(significantDigits)g",value)
         if eOutput.contains("e") {
             return eOutput
         } else {
             let numberFormatter = NumberFormatter()
+            numberFormatter.locale = Locale(identifier: "en_US_POSIX")
             numberFormatter.numberStyle = .decimal
-            numberFormatter.maximumFractionDigits = 4
+            numberFormatter.maximumFractionDigits = significantDigits
             numberFormatter.usesGroupingSeparator = true
             numberFormatter.groupingSeparator = ","
             numberFormatter.groupingSize = 3
             let nOutput = numberFormatter.string(for: value) ?? "[error]"
             return nOutput
         }
+    }
+
+    private func showCalculationError(_ message: String) {
+        calculationErrorDescription = message
+        textCurrent = "錯誤"
+        valueInput = nil
+        valueCurrent = 0
+        valueOperant = 0
+        textOperator = ""
+        textLastKey = "error"
+        opLog = []
+    }
+
+    private func prepareForNewInputAfterError() {
+        calculationErrorDescription = nil
+        textCurrent = "0"
+        valueInput = nil
+        valueCurrent = 0
+        valueOperant = 0
+        textOperator = ""
+        textLastKey = ""
+        opLog = []
     }
 
     var logText:String {
@@ -419,11 +394,6 @@ class calculator:ObservableObject {
 
         }
         
-        let leading:Int = Int(cgByClass([150,100,60]))
-        if text.count < leading { //讓自動捲動不會因為字數少不用捲而停擺
-            text = repeatElement(" ", count: leading - text.count ) + text
-        }
-
         return text
     }
     
@@ -437,9 +407,7 @@ class calculator:ObservableObject {
         "面積":["台坪","台畝","台分","台甲","m²","公頃","ft²"],
         ]
     
-    var cats:[String] {
-        return Array(units.keys).sorted()
-    }
+    let categories = ["貨幣", "重量", "長度", "面積"]
     
     var unitList:[String] {
         var list:[String] = []
@@ -467,10 +435,10 @@ class calculator:ObservableObject {
             unitFrom = unit
             unit = pickerUnit
             
-            if let i = cats.firstIndex(of: catFrom) {
+            if let i = categories.firstIndex(of: catFrom) {
                 catFromIndex = i
             }
-            if let i = cats.firstIndex(of: cat) {
+            if let i = categories.firstIndex(of: cat) {
                 catIndex = i
             }
             if let u = units[catFrom], let i = u.firstIndex(of: unitFrom) {
@@ -481,7 +449,6 @@ class calculator:ObservableObject {
             }
 
             if unitFrom != "-" {
-                print(catFrom,unitFrom,"-->",cat,unit)
                 if !isEditing {
                     textOperator = ""
                 }
@@ -497,8 +464,6 @@ class calculator:ObservableObject {
                         valueCurrent = valueInput ?? 0
                         textCurrent = outputText(valueCurrent)
                         textOperator = ""
-                        print(opLog.last.debugDescription)
-                        print(">> vOperant=\(valueOperant), op: \(textOperator), vInput: \(String(describing: valueInput)), key: \(unit),  vcurrent=\(valueCurrent), last: \(textLastKey), m=\(String(describing: valueMemory))\n")
                     }
                 } else {
                     textOperator = catFrom
@@ -507,19 +472,17 @@ class calculator:ObservableObject {
                         func formatter(_ format:String="yyyy/MM/dd") -> DateFormatter  {
                             let formatter = DateFormatter()
                             formatter.locale = Locale(identifier: "zh_Hant_TW")
-                            formatter.timeZone = TimeZone(identifier: "Asia/Taipei")!
+                            formatter.timeZone = TimeZone(identifier: "Asia/Taipei") ?? .current
                             formatter.dateFormat = format
                             return formatter
                         }
                         let dt = formatter("M月d日H時m分").string(from: t)
-                        k = "\(cat)(\(dt))"
+                        k = "\(cat)·\(currencySource)(\(dt))"
                         logCurrencyTime = t
                     }
                     opLog.append((valueOperant,catFrom,valueInput,k,
                                   valueCurrent,textLastKey,valueMemory,"cat"))
                     textOperator = unit
-                    print(opLog.last.debugDescription)
-                    print(">> vOperant=\(valueOperant), op: \(textOperator), vInput: \(String(describing: valueInput)), key: \(unit),  vcurrent=\(valueCurrent), last: \(textLastKey), m=\(String(describing: valueMemory))\n")
                 }
                 valueInput = nil
             }
@@ -527,9 +490,10 @@ class calculator:ObservableObject {
         
     }
 
-    var currencySource:String = "台灣銀行" //BOT, Bank of Taiwan
-    let currencyCode:([String]) = ["TWD","USD","JPY","EUR","GBP","KRW","VND","HKD","CNY"]
-    var currencyTime:Date?  //最後成功取得全部匯率的時間
+    @Published private(set) var currencySource = "台灣銀行" // BOT, Bank of Taiwan
+    private let currencyCode = ["TWD", "USD", "JPY", "EUR", "GBP", "KRW", "VND", "HKD", "CNY"]
+    @Published private(set) var currencyTime: Date? // 最後成功取得全部匯率的時間
+    @Published private(set) var currencyErrorDescription: String?
 
     //轉換係數：為了精度所以使用雙係數。例如3公斤=5台斤，則2公斤=2*5/3台斤。
     //這是3維陣列：[度量種類][原單位][新單位]
@@ -580,162 +544,297 @@ class calculator:ObservableObject {
         ]
     ]
 
-    
-    func loadCurrencyRate() {
-        if let dt = defaults.object(forKey: "currencyTime") {
-            currencyTime    = dt as? Date
-            currencySource  = defaults.string(forKey: "currencySource") ?? ""
-            
-            if let data = defaults.object(forKey: "currencyRate")  {
-                do {
-                    let decoder = JSONDecoder()
-                    currency = try decoder.decode([[[p]]].self, from:data as! Data)
-                } catch {
-                    NSLog("\ndecoder failed.")
-                }
-            }
-        }
-        factors = currency + metric
-        if let dt = currencyTime, dt.timeIntervalSinceNow > -14400 {
-            return //上次查詢匯率還沒超過4小時
-        }
-        queryBot()  //還沒成功查過就重試查詢匯率
-    }
-    
-
-    
-
-    func saveCurrencyRate() {
-        if let dt = currencyTime {
-            defaults.set(dt, forKey: "currencyTime")
-            defaults.set(currencySource,forKey:"currencySource")
-            do {
-                let encoder = JSONEncoder()
-                let data = try encoder.encode(currency)
-                defaults.set(data, forKey: "currencyRate")
-            } catch {
-                NSLog("\nencoder failed.")
-            }
+    private func loadCachedCurrencyRate() {
+        guard
+            let savedTime = defaults.object(forKey: "currencyTime") as? Date,
+            let data = defaults.data(forKey: "currencyRate"),
+            let savedCurrency = try? JSONDecoder().decode([[[p]]].self, from: data),
+            isValidCurrencyMatrix(savedCurrency)
+        else {
             factors = currency + metric
+            return
         }
+
+        currencyTime = savedTime
+        currencySource = defaults.string(forKey: "currencySource") ?? "台灣銀行"
+        currency = savedCurrency
+        factors = currency + metric
     }
 
-    //查詢台灣銀行匯率
-    func queryBot () {
-        let url = URL(string: "https://rate.bot.com.tw/xrt?Lang=zh-TW");
-        var request = URLRequest(url: url!,timeoutInterval: 30)
-        let userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/605.1.12 (KHTML, like Gecko) Version/11.1 Safari/605.1.12"
-        request.addValue(userAgent, forHTTPHeaderField: "User-Agent")
-        let task = URLSession.shared.dataTask(with: request, completionHandler: {(data, response, error) in
-            if error == nil {
-                if let downloadedData = String(data: data!, encoding: String.Encoding.utf8) {
-                    let leading = "最新掛牌時間：<span class=\"time\">"
-                    let trailing = "</span>"
-                    if let range = downloadedData.range(of: "\(leading)(.+)\(trailing)", options: .regularExpression) {
-                        let startIndex = downloadedData.index(range.lowerBound, offsetBy: leading.count)
-                        let endIndex   = downloadedData.index(range.upperBound, offsetBy: 0-trailing.count)
-                        let dTime = String(downloadedData[startIndex..<endIndex])
-                        let dateFormatter = DateFormatter()
-                        dateFormatter.locale=Locale(identifier: "zh_TW")
-                        dateFormatter.dateFormat = "yyyy/MM/dd HH:mm zzz"
-                        if let dt = dateFormatter.date(from: dTime+" GMT+8") {
-                            self.currencyTime = dt
-                            self.requestBotCurrency ()
-                        }
+    private func refreshCurrencyRateIfNeeded() async {
+        guard !isRefreshingCurrency else { return }
+        if let currencyTime, currencyTime.timeIntervalSinceNow > -14_400 {
+            return // 上次成功查詢匯率還沒超過四小時
+        }
 
-                    }
+        isRefreshingCurrency = true
+        defer { isRefreshingCurrency = false }
+
+        do {
+            let update: CurrencyUpdate
+            do {
+                update = try await fetchBankOfTaiwanUpdate()
+            } catch let bankError {
+                do {
+                    update = try await fetchCentralBankUpdate()
+                } catch let centralBankError {
+                    throw CurrencyRateError.allSourcesFailed(
+                        bank: bankError.localizedDescription,
+                        centralBank: centralBankError.localizedDescription
+                    )
                 }
             }
-        })
-        task.resume()
-    }
 
-
-    func requestBotCurrency () {
-        let url = URL(string: "https://rate.bot.com.tw/xrt/fltxt/0/day");
-        var request = URLRequest(url: url!,timeoutInterval: 30)
-        let userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/605.1.12 (KHTML, like Gecko) Version/11.1 Safari/605.1.12"
-        request.addValue(userAgent, forHTTPHeaderField: "User-Agent")
-        let task = URLSession.shared.dataTask(with: request, completionHandler: {(data, response, error) in
-            if error == nil {
-                if let downloadedData = String(data: data!, encoding: String.Encoding.utf8) {
-                    for (indexFrom,_) in self.currencyCode.enumerated() {
-                        for (indexTo,currencyTo) in self.currencyCode.enumerated() {
-                            if indexFrom < indexTo {    //只查一半的表格，另一半就是係數顛倒，所以直接填入
-                                if indexFrom == 0 {
-                                    self.currency[0][indexFrom][indexTo].f1 = self.parsingBot(downloadedData,code: currencyTo).cashSelling
-                                    self.currency[0][indexTo][indexFrom].f0 = self.currency[0][indexFrom][indexTo].f1
-                                } else {
-                                    self.currency[0][indexFrom][indexTo].f1 = self.currency[0][0][indexTo].f1   //以下皆以對台幣的價格帶入，以維持換算係數的一致
-                                    self.currency[0][indexFrom][indexTo].f0 = self.currency[0][0][indexFrom].f1
-                                    self.currency[0][indexTo][indexFrom].f1 = self.currency[0][0][indexFrom].f1
-                                    self.currency[0][indexTo][indexFrom].f0 = self.currency[0][0][indexTo].f1
-                               }
-                            }
-
-                        }
-                    }
-                    self.saveCurrencyRate()
-                }
-            } else {
-                print("rate.bot.com.tw error!")
-            }
-        })
-        task.resume()
-
-    }
-
-    func parsingBot (_ data:String,code:String) -> (cashBuying:Double,cashSelling:Double,spotBuying:Double,spotSelling:Double) {
-        var cashBuying:Double   = 0
-        var cashSelling:Double  = 0
-        var spotBuying:Double   = 0
-        var spotSelling:Double  = 0
-        var buying:String  = "本行買入"
-        var selling:String = "本行賣出"
-        if data.contains("Currency") {
-            buying  = "Buying"
-            selling = "Selling"
+            currency = update.matrix
+            currencyTime = update.timestamp
+            currencySource = update.source
+            currencyErrorDescription = nil
+            factors = currency + metric
+            saveCurrencyRate()
+        } catch {
+            // 保留最後一次成功的資料；網站暫時失效不應破壞離線換算。
+            currencyErrorDescription = error.localizedDescription
         }
-        let leading = "\(code)         \(buying)"
-        let trailing = "\r\n"
-        if let range=data.range(of: "\(leading)(.+)\(trailing)", options: .regularExpression) {
-            let startIndex = data.index(range.lowerBound, offsetBy: leading.count)
-            let endIndex = data.index(range.upperBound, offsetBy: 0-trailing.count)
-            let data1 = String(data[startIndex..<endIndex])    //data.substring(with: range).replacingOccurrences(of: currency+"         \(buying)", with: "")
-//            let data2 = data1.replacingOccurrences(of: "\r", with: "")
-            let data3 = data1.replacingOccurrences(of: selling, with: "")
-            let data4 = data3.replacingOccurrences(of: "    ", with: " ")
-            let data5 = data4.replacingOccurrences(of: "  ", with: " ")
-            let data6 = data5.replacingOccurrences(of: "  ", with: " ")
-            let data0 = data6.replacingOccurrences(of: "  ", with: " ")
-            if let d1=Double(data0.components(separatedBy: " ")[1]) {
-                cashBuying  = d1    //買入現金
+    }
+
+    private func fetchBankOfTaiwanUpdate() async throws -> CurrencyUpdate {
+        let timestampPage = try await fetchText(
+            from: URL(string: "https://rate.bot.com.tw/xrt?Lang=zh-TW")
+        )
+        let ratePage = try await fetchText(
+            from: URL(string: "https://rate.bot.com.tw/xrt/fltxt/0/day")
+        )
+        return CurrencyUpdate(
+            matrix: try makeCurrencyMatrix(from: ratePage),
+            timestamp: try parseBOTTimestamp(timestampPage),
+            source: "台灣銀行"
+        )
+    }
+
+    private func fetchCentralBankUpdate() async throws -> CurrencyUpdate {
+        let data = try await fetchData(
+            from: URL(string: "https://cpx.cbc.gov.tw/API/DataAPI/Get?FileName=BP01D01")
+        )
+        let response = try JSONDecoder().decode(CentralBankResponse.self, from: data)
+        guard let latest = response.data.dataSets.last, latest.indices.contains(18) else {
+            throw CurrencyRateError.invalidCentralBankData
+        }
+
+        func number(at index: Int) throws -> Double {
+            guard let value = Double(latest[index]), value > 0 else {
+                throw CurrencyRateError.invalidCentralBankData
             }
-            if let d2=Double(data0.components(separatedBy: " ")[10]) {
-                cashSelling = d2    //買入即期
-            }
-            if let d3=Double(data0.components(separatedBy: " ")[2]) {
-                spotBuying  = d3    //賣出現金
-            }
-            if let d4=Double(data0.components(separatedBy: " ")[11]) {
-                spotSelling = d4    //賣出即期
-            }
-            if cashSelling == 0 {
-                cashSelling = spotSelling
-            }
-            if spotSelling == 0 {
-                spotSelling = cashSelling
-            }
-            if cashBuying == 0 {
-                cashBuying = spotBuying
-            }
-            if spotBuying == 0 {
-                spotBuying = cashBuying
+            return value
+        }
+
+        let twdPerUSD = try number(at: 1)
+        let twdValues = try [
+            1,
+            twdPerUSD,
+            twdPerUSD / number(at: 2),  // JPY per USD
+            twdPerUSD * number(at: 14), // USD per EUR
+            twdPerUSD * number(at: 3),  // USD per GBP
+            twdPerUSD / number(at: 5),  // KRW per USD
+            twdPerUSD / number(at: 18), // VND per USD
+            twdPerUSD / number(at: 4),  // HKD per USD
+            twdPerUSD / number(at: 8)   // CNY per USD
+        ]
+        let matrix = twdValues.map { sourceValue in
+            twdValues.map { destinationValue in
+                p(f0: sourceValue, f1: destinationValue)
             }
         }
-        return (cashBuying,cashSelling,spotBuying,spotSelling)
-    }
-    
 
-     
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "Asia/Taipei")
+        formatter.dateFormat = "yyyyMMdd HH:mm"
+        guard let timestamp = formatter.date(from: "\(latest[0]) 16:00") else {
+            throw CurrencyRateError.invalidCentralBankData
+        }
+
+        return CurrencyUpdate(
+            matrix: [matrix],
+            timestamp: timestamp,
+            source: "央行參考"
+        )
+    }
+
+    private func fetchData(from url: URL?) async throws -> Data {
+        guard let url else { throw CurrencyRateError.invalidURL }
+
+        var request = URLRequest(url: url, timeoutInterval: 30)
+        request.setValue(
+            "unitCalc/1.1 (tw.com.unlock.unitCalc)",
+            forHTTPHeaderField: "User-Agent"
+        )
+
+        let (data, response) = try await session.data(for: request)
+        guard
+            let httpResponse = response as? HTTPURLResponse,
+            200..<300 ~= httpResponse.statusCode
+        else {
+            throw CurrencyRateError.invalidResponse
+        }
+        guard data.count <= 5_000_000 else {
+            throw CurrencyRateError.responseTooLarge
+        }
+        return data
+    }
+
+    private func fetchText(from url: URL?) async throws -> String {
+        let data = try await fetchData(from: url)
+        guard let text = String(data: data, encoding: .utf8) else {
+            throw CurrencyRateError.invalidText
+        }
+        return text
+    }
+
+    private func parseBOTTimestamp(_ data: String) throws -> Date {
+        let leading = "最新掛牌時間：<span class=\"time\">"
+        let trailing = "</span>"
+        guard let range = data.range(
+            of: "\(leading)(.+?)\(trailing)",
+            options: .regularExpression
+        ) else {
+            throw CurrencyRateError.timestampNotFound
+        }
+
+        let startIndex = data.index(range.lowerBound, offsetBy: leading.count)
+        let endIndex = data.index(range.upperBound, offsetBy: -trailing.count)
+        let timestampText = String(data[startIndex..<endIndex])
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_TW")
+        formatter.timeZone = TimeZone(identifier: "Asia/Taipei")
+        formatter.dateFormat = "yyyy/MM/dd HH:mm"
+
+        guard let timestamp = formatter.date(from: timestampText) else {
+            throw CurrencyRateError.timestampNotFound
+        }
+        return timestamp
+    }
+
+    func makeCurrencyMatrix(from data: String) throws -> [[[p]]] {
+        var taiwanDollarValues = [1.0]
+        for code in currencyCode.dropFirst() {
+            guard let quote = parseBOTQuote(data, code: code), quote.cashSelling > 0 else {
+                throw CurrencyRateError.rateNotFound(code)
+            }
+            taiwanDollarValues.append(quote.cashSelling)
+        }
+
+        let matrix = taiwanDollarValues.map { sourceValue in
+            taiwanDollarValues.map { destinationValue in
+                p(f0: sourceValue, f1: destinationValue)
+            }
+        }
+        return [matrix]
+    }
+
+    func parseBOTQuote(
+        _ data: String,
+        code: String
+    ) -> (cashBuying: Double, cashSelling: Double, spotBuying: Double, spotSelling: Double)? {
+        guard let line = data.split(whereSeparator: \.isNewline).first(where: { line in
+            line.split(whereSeparator: \.isWhitespace).first.map(String.init) == code
+        }) else {
+            return nil
+        }
+
+        let fields = line.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard
+            let buyingIndex = fields.firstIndex(where: { $0 == "Buying" || $0 == "本行買入" }),
+            let sellingIndex = fields.firstIndex(where: { $0 == "Selling" || $0 == "本行賣出" }),
+            fields.indices.contains(buyingIndex + 2),
+            fields.indices.contains(sellingIndex + 2)
+        else { return nil }
+
+        var cashBuying = Double(fields[buyingIndex + 1]) ?? 0
+        var spotBuying = Double(fields[buyingIndex + 2]) ?? 0
+        var cashSelling = Double(fields[sellingIndex + 1]) ?? 0
+        var spotSelling = Double(fields[sellingIndex + 2]) ?? 0
+
+        if cashSelling == 0 { cashSelling = spotSelling }
+        if spotSelling == 0 { spotSelling = cashSelling }
+        if cashBuying == 0 { cashBuying = spotBuying }
+        if spotBuying == 0 { spotBuying = cashBuying }
+
+        guard cashSelling > 0 else { return nil }
+        return (cashBuying, cashSelling, spotBuying, spotSelling)
+    }
+
+    private func saveCurrencyRate() {
+        guard let currencyTime, let data = try? JSONEncoder().encode(currency) else { return }
+        defaults.set(currencyTime, forKey: "currencyTime")
+        defaults.set(currencySource, forKey: "currencySource")
+        defaults.set(data, forKey: "currencyRate")
+    }
+
+    func isValidCurrencyMatrix(_ matrix: [[[p]]]) -> Bool {
+        guard
+            matrix.count == 1,
+            matrix[0].count == currencyCode.count,
+            matrix[0].allSatisfy({ $0.count == currencyCode.count })
+        else { return false }
+
+        let rates = matrix[0].map { row in
+            row.map { factor in factor.f0 / factor.f1 }
+        }
+        guard rates.joined().allSatisfy({ $0.isFinite && $0 > 0 }) else { return false }
+
+        for index in rates.indices {
+            guard abs(rates[index][index] - 1) < 1e-12 else { return false }
+            for destination in rates.indices {
+                let roundTrip = rates[index][destination] * rates[destination][index]
+                guard abs(roundTrip - 1) < 1e-9 else { return false }
+            }
+        }
+        return true
+    }
+
+    private struct CurrencyUpdate {
+        let matrix: [[[p]]]
+        let timestamp: Date
+        let source: String
+    }
+
+    private struct CentralBankResponse: Decodable {
+        let data: CentralBankData
+    }
+
+    private struct CentralBankData: Decodable {
+        let dataSets: [[String]]
+    }
+
+    private enum CurrencyRateError: LocalizedError {
+        case invalidURL
+        case invalidResponse
+        case invalidText
+        case timestampNotFound
+        case rateNotFound(String)
+        case invalidCentralBankData
+        case responseTooLarge
+        case allSourcesFailed(bank: String, centralBank: String)
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidURL:
+                "匯率網址無效"
+            case .invalidResponse:
+                "台灣銀行暫時無法回應"
+            case .invalidText:
+                "台灣銀行回傳的資料無法讀取"
+            case .timestampNotFound:
+                "找不到台灣銀行掛牌時間"
+            case .rateNotFound(let code):
+                "找不到 \(code) 匯率"
+            case .invalidCentralBankData:
+                "中央銀行匯率資料格式不完整"
+            case .responseTooLarge:
+                "匯率資料大小異常"
+            case .allSourcesFailed(let bank, let centralBank):
+                "匯率更新失敗（臺灣銀行：\(bank)；中央銀行：\(centralBank)）"
+            }
+        }
+    }
 }

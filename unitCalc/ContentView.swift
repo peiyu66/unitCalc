@@ -63,7 +63,7 @@ struct ContentView: View {
             }
         } else if layout.keypadLayout == .wide {
             HStack(spacing: 10) {
-                categoryPicker
+                categoryPicker(layout: layout)
                     .frame(maxWidth: min(360, layout.size.width * 0.42))
                 unitPicker(layout: layout)
                 aboutButton(layout: layout)
@@ -71,7 +71,7 @@ struct ContentView: View {
         } else {
             VStack(spacing: layout.selectorSpacing) {
                 HStack(spacing: layout.selectorSpacing) {
-                    categoryPicker
+                    categoryPicker(layout: layout)
                     aboutButton(layout: layout)
                 }
                 unitPicker(layout: layout)
@@ -79,13 +79,14 @@ struct ContentView: View {
         }
     }
 
-    private var categoryPicker: some View {
+    private func categoryPicker(layout: CalculatorLayout) -> some View {
         Picker("換算種類", selection: categoryBinding) {
             ForEach(calculator.categories, id: \.self) { category in
                 Text(category).tag(category)
             }
         }
         .pickerStyle(.segmented)
+        .font(.system(size: layout.selectorFontSize, weight: .semibold))
         .accessibilityLabel("換算種類")
     }
 
@@ -99,7 +100,7 @@ struct ContentView: View {
         } label: {
             HStack(spacing: 6) {
                 Text(category)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.system(size: layout.selectorFontSize, weight: .semibold))
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
                     .font(.caption.weight(.bold))
@@ -113,7 +114,7 @@ struct ContentView: View {
             }
             .overlay {
                 Capsule()
-                    .stroke(Color.accentColor.opacity(0.8), lineWidth: 1)
+                    .strokeBorder(Color.accentColor.opacity(0.8), lineWidth: 1)
             }
         }
         .buttonStyle(.plain)
@@ -127,7 +128,7 @@ struct ContentView: View {
             showsAbout = true
         } label: {
             Image(systemName: "info.circle")
-                .font(.title3)
+                .font(.system(size: layout.selectorIconSize))
                 .frame(
                     width: layout.selectorControlHeight,
                     height: layout.selectorControlHeight
@@ -208,7 +209,10 @@ struct ContentView: View {
             unitBinding.wrappedValue = unitName
         } label: {
             Text(unitName)
-                .font(.subheadline.weight(unitName == unit ? .semibold : .regular))
+                .font(.system(
+                    size: layout.selectorFontSize,
+                    weight: unitName == unit ? .semibold : .medium
+                ))
                 .lineLimit(1)
                 .padding(.horizontal, layout.unitHorizontalPadding)
                 .frame(minHeight: layout.selectorControlHeight)
@@ -219,7 +223,7 @@ struct ContentView: View {
                 }
                 .overlay {
                     Capsule()
-                        .stroke(Color.accentColor.opacity(0.8), lineWidth: 1)
+                        .strokeBorder(Color.accentColor.opacity(0.8), lineWidth: 1)
                 }
         }
         .buttonStyle(.plain)
@@ -305,7 +309,7 @@ struct ContentView: View {
             Text(calculator.textCurrent)
                 .font(.system(
                     size: scaledFontSize(layout.outputFontSize, maximumScale: 1.3),
-                    weight: .regular,
+                    weight: layout.outputFontWeight,
                     design: .rounded
                 ))
                 .monospacedDigit()
@@ -541,7 +545,11 @@ private struct CalculatorKeypad: View {
                     Text(key == "." ? "•" : key)
                 }
             }
-            .font(.system(size: fontSize(for: key, cellHeight: height), weight: .regular, design: .rounded))
+            .font(.system(
+                size: fontSize(for: key, cellHeight: height),
+                weight: layout.fontWeight,
+                design: .rounded
+            ))
             .minimumScaleFactor(0.55)
             .lineLimit(1)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -620,24 +628,30 @@ private enum KeypadLayout {
     var labelScale: CGFloat {
         switch self {
         case .compact: 0.54
-        case .pad: 0.48
-        case .wide: 0.44
+        case .pad: 0.52
+        case .wide: 0.50
         }
     }
 
     var longLabelScale: CGFloat {
         switch self {
         case .compact: 0.36
-        case .pad: 0.30
-        case .wide: 0.28
+        case .pad: 0.40
+        case .wide: 0.38
         }
     }
 
     var maximumFontSize: CGFloat {
         switch self {
         case .compact: 48
-        case .pad: 58
-        case .wide: 52
+        case .pad, .wide: 76
+        }
+    }
+
+    var fontWeight: Font.Weight {
+        switch self {
+        case .compact: .regular
+        case .pad, .wide: .medium
         }
     }
 }
@@ -695,6 +709,14 @@ private struct CalculatorLayout {
         usesCompactLandscapeSelector ? 34 : 44
     }
 
+    var selectorFontSize: CGFloat {
+        usesCompactLandscapeSelector || keypadLayout == .compact ? 15 : 18
+    }
+
+    var selectorIconSize: CGFloat {
+        usesCompactLandscapeSelector ? 20 : 22
+    }
+
     var unitScrollContentPadding: CGFloat {
         usesCompactLandscapeSelector ? 16 : 1
     }
@@ -712,10 +734,13 @@ private struct CalculatorLayout {
         case .compact:
             return max(150, size.height * 0.28)
         case .pad:
-            return max(180, size.height * 0.28)
+            return max(180, size.height * 0.29)
         case .wide:
+            guard usesCompactLandscapeSelector else {
+                return min(320, max(180, size.height * 0.30))
+            }
+
             let idealHeight = min(140, max(96, size.height * 0.26))
-            guard usesCompactLandscapeSelector else { return idealHeight }
 
             let selectorHeight = selectorControlHeight
             let keypadMinimumHeight = (44 * 4) + (KeypadLayout.wide.spacing * 3)
@@ -726,23 +751,72 @@ private struct CalculatorLayout {
     }
 
     var logHeight: CGFloat {
-        keypadLayout == .wide ? 24 : max(34, displayHeight * 0.18)
+        switch keypadLayout {
+        case .compact:
+            return max(34, displayHeight * 0.18)
+        case .pad:
+            return max(38, displayHeight * 0.16)
+        case .wide:
+            return usesCompactLandscapeSelector
+                ? compactLandscapeAuxiliaryHeight
+                : max(34, displayHeight * 0.14)
+        }
     }
 
     var memoryHeight: CGFloat {
-        keypadLayout == .wide ? 24 : max(32, displayHeight * 0.18)
+        switch keypadLayout {
+        case .compact:
+            return max(32, displayHeight * 0.18)
+        case .pad:
+            return max(38, displayHeight * 0.16)
+        case .wide:
+            return usesCompactLandscapeSelector
+                ? compactLandscapeAuxiliaryHeight
+                : max(34, displayHeight * 0.14)
+        }
+    }
+
+    private var compactLandscapeAuxiliaryHeight: CGFloat {
+        min(24, max(18, displayHeight * 0.22))
     }
 
     var logFontSize: CGFloat {
-        min(26, max(14, displayHeight * 0.10))
+        switch keypadLayout {
+        case .compact:
+            return min(26, max(14, displayHeight * 0.10))
+        case .pad:
+            return min(34, max(16, displayHeight * 0.10))
+        case .wide:
+            return min(30, max(16, displayHeight * 0.10))
+        }
     }
 
     var outputFontSize: CGFloat {
-        min(keypadLayout == .compact ? 88 : 132, displayHeight * 0.48)
+        switch keypadLayout {
+        case .compact:
+            return min(88, displayHeight * 0.48)
+        case .pad:
+            return min(196, displayHeight * 0.55)
+        case .wide:
+            return usesCompactLandscapeSelector
+                ? min(96, displayHeight * 0.70)
+                : min(190, displayHeight * 0.62)
+        }
+    }
+
+    var outputFontWeight: Font.Weight {
+        usesCompactLandscapeSelector ? .medium : .regular
     }
 
     var memoryFontSize: CGFloat {
-        min(30, max(16, displayHeight * 0.12))
+        switch keypadLayout {
+        case .compact:
+            return min(30, max(16, displayHeight * 0.12))
+        case .pad:
+            return min(44, max(18, displayHeight * 0.13))
+        case .wide:
+            return min(38, max(18, displayHeight * 0.12))
+        }
     }
 
     var displayHorizontalPadding: CGFloat {

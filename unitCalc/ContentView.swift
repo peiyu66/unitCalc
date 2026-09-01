@@ -79,15 +79,26 @@ struct ContentView: View {
         }
     }
 
+    @ViewBuilder
     private func categoryPicker(layout: CalculatorLayout) -> some View {
-        Picker("換算種類", selection: categoryBinding) {
-            ForEach(calculator.categories, id: \.self) { category in
-                Text(category).tag(category)
+        if layout.keypadLayout == .compact {
+            Picker("換算種類", selection: categoryBinding) {
+                ForEach(calculator.categories, id: \.self) { category in
+                    Text(category).tag(category)
+                }
             }
+            .pickerStyle(.segmented)
+            .font(.system(size: layout.categoryFontSize, weight: .semibold))
+            .accessibilityLabel("換算種類")
+        } else {
+            CategorySegmentedControl(
+                categories: calculator.categories,
+                selection: categoryBinding,
+                fontSize: layout.categoryFontSize
+            )
+            .frame(height: layout.selectorControlHeight)
+            .accessibilityLabel("換算種類")
         }
-        .pickerStyle(.segmented)
-        .font(.system(size: layout.selectorFontSize, weight: .semibold))
-        .accessibilityLabel("換算種類")
     }
 
     private func categoryMenu(layout: CalculatorLayout) -> some View {
@@ -100,7 +111,7 @@ struct ContentView: View {
         } label: {
             HStack(spacing: 6) {
                 Text(category)
-                    .font(.system(size: layout.selectorFontSize, weight: .semibold))
+                    .font(.system(size: layout.categoryFontSize, weight: .semibold))
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
                     .font(.caption.weight(.bold))
@@ -604,6 +615,57 @@ private struct CalculatorKeypad: View {
     }
 }
 
+private struct CategorySegmentedControl: UIViewRepresentable {
+    let categories: [String]
+    @Binding var selection: String
+    let fontSize: CGFloat
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(selection: $selection)
+    }
+
+    func makeUIView(context: Context) -> UISegmentedControl {
+        let control = UISegmentedControl(items: categories)
+        control.addTarget(
+            context.coordinator,
+            action: #selector(Coordinator.selectionChanged(_:)),
+            for: .valueChanged
+        )
+        return control
+    }
+
+    func updateUIView(_ control: UISegmentedControl, context: Context) {
+        let currentTitles = (0..<control.numberOfSegments).map { control.titleForSegment(at: $0) }
+        if currentTitles != categories.map(Optional.some) {
+            control.removeAllSegments()
+            for (index, category) in categories.enumerated() {
+                control.insertSegment(withTitle: category, at: index, animated: false)
+            }
+        }
+
+        control.selectedSegmentIndex = categories.firstIndex(of: selection) ?? UISegmentedControl.noSegment
+
+        let titleAttributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: fontSize, weight: .semibold)
+        ]
+        control.setTitleTextAttributes(titleAttributes, for: .normal)
+        control.setTitleTextAttributes(titleAttributes, for: .selected)
+    }
+
+    final class Coordinator: NSObject {
+        private var selection: Binding<String>
+
+        init(selection: Binding<String>) {
+            self.selection = selection
+        }
+
+        @MainActor @objc func selectionChanged(_ sender: UISegmentedControl) {
+            guard let title = sender.titleForSegment(at: sender.selectedSegmentIndex) else { return }
+            selection.wrappedValue = title
+        }
+    }
+}
+
 private enum KeypadLayout {
     case compact
     case pad
@@ -711,6 +773,10 @@ private struct CalculatorLayout {
 
     var selectorFontSize: CGFloat {
         usesCompactLandscapeSelector || keypadLayout == .compact ? 15 : 18
+    }
+
+    var categoryFontSize: CGFloat {
+        keypadLayout == .compact || usesCompactLandscapeSelector ? selectorFontSize : 20
     }
 
     var selectorIconSize: CGFloat {

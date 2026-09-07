@@ -1,6 +1,6 @@
 # unitCalc
 
-unitCalc（小確幸度量計算機）是一款適用於 iPhone 與 iPad 的計算及單位換算 App，提供基本運算、記憶功能，以及台灣常用度量單位與貨幣換算。
+unitCalc（小確幸度量計算機）是一款適用於 iPhone 與 iPad 的計算及單位換算 App，提供基本運算、記憶功能，以及台灣常用度量單位與貨幣換算。需要 iOS／iPadOS 15 或以上版本。
 
 [App Store](https://apps.apple.com/tw/app/unitcalc/id6445979881) · [隱私權政策](https://peiyu66.github.io/unitCalc/docs/PrivacyPolicy.html)
 
@@ -25,13 +25,6 @@ unitCalc（小確幸度量計算機）是一款適用於 iPhone 與 iPad 的計�
 ## 隱私
 
 unitCalc 不需要帳號，也不使用廣告、分析或追蹤服務。App 僅在更新匯率時連線至臺灣銀行或中央銀行；詳細內容請參閱[隱私權政策](https://peiyu66.github.io/unitCalc/docs/PrivacyPolicy.html)。
-
-## 開發與驗證
-
-- 最低支援 iOS 15。
-- 使用 SwiftUI 與 Swift 6。
-- Xcode scheme：`unitCalc`。
-- 測試 targets：`unitCalcTests`、`unitCalcUITests`。
 
 ## 截圖
 

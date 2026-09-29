@@ -2,6 +2,43 @@ import XCTest
 
 final class UnitCalcUITests: XCTestCase {
     @MainActor
+    func testCategorySwitchSelectsCommonUnitAndPreservesConversion() throws {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launch()
+
+        let catty = app.buttons["台斤"]
+        XCTAssertTrue(catty.waitForExistence(timeout: 8))
+        XCTAssertTrue(catty.isSelected)
+        let weightUnits = ["台斤", "台兩", "公斤", "公克"]
+        for (left, right) in zip(weightUnits, weightUnits.dropFirst()) {
+            XCTAssertLessThan(app.buttons[left].frame.minX, app.buttons[right].frame.minX)
+        }
+        app.buttons["清除"].tap()
+        app.buttons["1"].tap()
+        app.buttons["台兩"].tap()
+        XCTAssertTrue(app.staticTexts["計算結果 16"].waitForExistence(timeout: 2))
+
+        app.segmentedControls.buttons["長度"].tap()
+        XCTAssertTrue(app.buttons["公尺"].isSelected)
+        app.segmentedControls.buttons["面積"].tap()
+        XCTAssertTrue(app.buttons["台坪"].isSelected)
+        app.segmentedControls.buttons["重量"].tap()
+        XCTAssertTrue(catty.isSelected)
+
+        app.segmentedControls.buttons["貨幣"].tap()
+        let dollar = app.buttons["美元"]
+        XCTAssertTrue(dollar.waitForExistence(timeout: 30))
+        XCTAssertTrue(dollar.isSelected)
+        XCTAssertLessThan(dollar.frame.minX, app.buttons["台幣"].frame.minX)
+        app.buttons["台幣"].tap()
+        app.segmentedControls.buttons["重量"].tap()
+        app.segmentedControls.buttons["貨幣"].tap()
+        XCTAssertTrue(dollar.isSelected)
+    }
+
+    @MainActor
     func testCoreControlsRemainUsableInPortraitAndLandscape() throws {
         continueAfterFailure = false
         XCUIDevice.shared.orientation = .portrait

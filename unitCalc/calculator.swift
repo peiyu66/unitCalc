@@ -400,12 +400,20 @@ final class Calculator: ObservableObject {
 
     //單位換算
     
-    let units:[String:[String]] =  [
+    // 係數矩陣與匯率快取的固定索引順序，不隨畫面排序改變。
+    private let conversionUnits:[String:[String]] =  [
         "貨幣":["台幣","美元","日圓","歐元","英鎊","韓元","越南盾","港幣","人民幣"],
         "重量":["公克","公斤","台斤","台兩","英磅","盎司"],
         "長度":["公尺","公分","台尺","台寸","英尺","英寸"],
         "面積":["台坪","台畝","台分","台甲","m²","公頃","ft²"],
         ]
+
+    var units: [String: [String]] {
+        var displayUnits = conversionUnits
+        displayUnits["重量"] = ["台斤", "台兩", "公斤", "公克", "英磅", "盎司"]
+        displayUnits["貨幣"] = ["美元", "台幣", "日圓", "歐元", "英鎊", "韓元", "越南盾", "港幣", "人民幣"]
+        return displayUnits
+    }
     
     let categories = ["貨幣", "重量", "長度", "面積"]
     
@@ -441,10 +449,10 @@ final class Calculator: ObservableObject {
             if let i = categories.firstIndex(of: cat) {
                 catIndex = i
             }
-            if let u = units[catFrom], let i = u.firstIndex(of: unitFrom) {
+            if let u = conversionUnits[catFrom], let i = u.firstIndex(of: unitFrom) {
                 unitFromIndex = i
             }
-            if let u = units[cat], let i = u.firstIndex(of: unit) {
+            if let u = conversionUnits[cat], let i = u.firstIndex(of: unit) {
                 unitIndex = i
             }
 

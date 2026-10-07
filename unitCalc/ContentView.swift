@@ -119,14 +119,7 @@ struct ContentView: View {
             .foregroundStyle(Color.accentColor)
             .padding(.horizontal, 10)
             .frame(maxWidth: .infinity, minHeight: layout.selectorControlHeight)
-            .background {
-                Capsule()
-                    .fill(Color(uiColor: .secondarySystemBackground))
-            }
-            .overlay {
-                Capsule()
-                    .strokeBorder(Color.accentColor.opacity(0.8), lineWidth: 1)
-            }
+            .modifier(TopControlSurface(shape: Capsule(), legacyCapsule: true))
         }
         .buttonStyle(.plain)
         .frame(width: layout.compactCategoryWidth)
@@ -148,6 +141,7 @@ struct ContentView: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(Color.accentColor)
+        .modifier(TopControlSurface(shape: Circle()))
         .accessibilityLabel("關於與隱私權")
         .accessibilityShowsLargeContentViewer()
     }
@@ -408,6 +402,42 @@ struct ContentView: View {
 
     private func scaledFontSize(_ base: CGFloat, maximumScale: CGFloat) -> CGFloat {
         min(base * displayTextScale, base * maximumScale)
+    }
+}
+
+// Keep glass on the two top-level controls, away from numbers and the keypad.
+// The debug-only switch captures the original styling with the same SDK and layout.
+private struct TopControlSurface<S: Shape>: ViewModifier {
+    let shape: S
+    var legacyCapsule = false
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    private var usesGlass: Bool {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--unitcalc-legacy-controls") {
+            return false
+        }
+        #endif
+        return !reduceTransparency && contrast != .increased
+    }
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *), usesGlass {
+            content.glassEffect(.regular.interactive(!reduceMotion), in: shape)
+        } else if legacyCapsule {
+            content
+                .background {
+                    Capsule().fill(Color(uiColor: .secondarySystemBackground))
+                }
+                .overlay {
+                    Capsule().strokeBorder(Color.accentColor.opacity(0.8), lineWidth: 1)
+                }
+        } else {
+            content
+        }
     }
 }
 

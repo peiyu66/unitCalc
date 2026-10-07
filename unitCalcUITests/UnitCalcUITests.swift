@@ -88,6 +88,55 @@ final class UnitCalcUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["計算結果 3"].waitForExistence(timeout: 2))
     }
 
+    // Same SDK, content and layout on both sides; only the custom top surfaces differ.
+    @MainActor
+    func testTopControlGlassComparisonAndInteractions() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        for style in ["Light", "Dark"] {
+            for legacy in [true, false] {
+                XCUIDevice.shared.orientation = .portrait
+                app.launchArguments = ["-AppleInterfaceStyle", style]
+                if legacy { app.launchArguments.append("--unitcalc-legacy-controls") }
+                app.launch()
+                XCTAssertTrue(app.buttons["台斤"].waitForExistence(timeout: 8))
+                for (name, orientation) in [("portrait", UIDeviceOrientation.portrait),
+                                             ("landscape", UIDeviceOrientation.landscapeLeft)] {
+                    XCUIDevice.shared.orientation = orientation
+                    let about = app.buttons["關於與隱私權"]
+                    XCTAssertTrue(about.waitForExistence(timeout: 5))
+                    assertContainedInMainWindow(about, app: app)
+                    about.tap()
+                    XCTAssertTrue(app.navigationBars["關於 unitCalc"].waitForExistence(timeout: 3))
+                    app.buttons["完成"].tap()
+                    // Exercise either the compact landscape menu or the native segments.
+                    if app.segmentedControls.buttons["長度"].exists {
+                        app.segmentedControls.buttons["長度"].tap()
+                        app.segmentedControls.buttons["重量"].tap()
+                    } else {
+                        app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "換算種類，目前為")).firstMatch.tap()
+                        app.buttons["長度"].tap()
+                        app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "換算種類，目前為")).firstMatch.tap()
+                        app.buttons["重量"].tap()
+                    }
+                    app.buttons["清除"].tap()
+                    app.buttons["1"].tap(withNumberOfTaps: 3, numberOfTouches: 1)
+                    XCTAssertTrue(app.staticTexts["計算結果 111"].waitForExistence(timeout: 2))
+                    app.buttons["清除"].tap()
+                    app.buttons["1"].tap()
+                    app.buttons["台兩"].tap()
+                    XCTAssertTrue(app.staticTexts["計算結果 16"].waitForExistence(timeout: 2))
+                    let attachment = XCTAttachment(screenshot: app.screenshot())
+                    attachment.name = "\(legacy ? "before" : "glass")-\(style.lowercased())-\(name)"
+                    attachment.lifetime = .keepAlways
+                    add(attachment)
+                }
+                app.terminate()
+            }
+        }
+        XCUIDevice.shared.orientation = .portrait
+    }
+
     @MainActor
     private func assertContainedInMainWindow(
         _ element: XCUIElement,

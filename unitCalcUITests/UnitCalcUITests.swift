@@ -218,7 +218,7 @@ final class UnitCalcUITests: XCTestCase {
         app.buttons["清除"].tap()
         app.buttons["十億"].tap()
         XCTAssertEqual(result.label, "計算結果 1,000,000,000")
-        XCUIDevice.shared.orientation = .portrait
+        rotateAndWait(.portrait, result: result, app: app)
         XCTAssertEqual(result.label, "計算結果 1,000,000,000")
         assertContainedInMainWindow(result, app: app)
         captureResult(app, name: "billion-input-portrait")
@@ -240,7 +240,7 @@ final class UnitCalcUITests: XCTestCase {
         for key in ["1", "2", "3", "4", "兆"] { app.buttons[key].tap() }
         XCTAssertEqual(result.label, "計算結果 1,234,000,000,000,000")
         captureResult(app, name: "large-input-landscape")
-        XCUIDevice.shared.orientation = .portrait
+        rotateAndWait(.portrait, result: result, app: app)
         XCTAssertEqual(result.label, "計算結果 1,234,000,000,000,000")
         captureResult(app, name: "large-input-portrait")
         app.buttons["清除"].tap()
@@ -254,10 +254,45 @@ final class UnitCalcUITests: XCTestCase {
         XCTAssertEqual(result.label, "計算結果 0")
         for key in ["0", "減", "1", "2", "3", "4", "兆", "等於", "儲存至記憶", "清除", "讀取記憶"] { app.buttons[key].tap() }
         XCTAssertEqual(result.label, "計算結果 -1,234,000,000,000,000")
-        XCUIDevice.shared.orientation = .portrait
+        rotateAndWait(.portrait, result: result, app: app)
         XCTAssertEqual(result.label, "計算結果 -1,234,000,000,000,000")
         assertContainedInMainWindow(result, app: app)
         captureResult(app, name: "negative-recalled-input-portrait")
+    }
+
+    @MainActor
+    private func rotateAndWait(
+        _ orientation: UIDeviceOrientation,
+        result: XCUIElement,
+        app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCUIDevice.shared.orientation = orientation
+        // The result label does not change while rotating. Its existence or text
+        // therefore cannot prove that XCTest's window and element frames have settled.
+        var previousWindow = CGRect.null
+        var previousResult = CGRect.null
+        var lastChange = ProcessInfo.processInfo.systemUptime
+        let stableLayout = NSPredicate { _, _ in
+            guard result.exists else { return false }
+            let windowFrame = app.windows.firstMatch.frame
+            let resultFrame = result.frame
+            let now = ProcessInfo.processInfo.systemUptime
+            if windowFrame != previousWindow || resultFrame != previousResult {
+                previousWindow = windowFrame
+                previousResult = resultFrame
+                lastChange = now
+                return false
+            }
+            return !windowFrame.isEmpty && !resultFrame.isEmpty
+                && (windowFrame.width > windowFrame.height) == orientation.isLandscape
+                && now - lastChange >= 0.3
+        }
+        let expectation = XCTNSPredicateExpectation(predicate: stableLayout, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 5), .completed,
+                       "Rotation layout did not settle", file: file, line: line)
+        // Keep the separate containment assertions; stable clipping must still fail.
     }
 
     @MainActor

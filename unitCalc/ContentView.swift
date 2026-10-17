@@ -311,18 +311,15 @@ struct ContentView: View {
             .padding(.horizontal, layout.displayHorizontalPadding)
             .frame(height: layout.logHeight)
 
-            Text(calculator.textCurrent)
-                .font(.system(
-                    size: scaledFontSize(layout.outputFontSize, maximumScale: 1.3),
-                    weight: layout.outputFontWeight,
-                    design: .rounded
-                ))
-                .monospacedDigit()
-                .minimumScaleFactor(0.22)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-                .padding(.horizontal, layout.displayHorizontalPadding)
-                .accessibilityLabel("計算結果 \(calculator.textCurrent)")
+            AdaptiveResultView(
+                value: calculator.valueCurrent,
+                inputText: calculator.inputDisplayText,
+                errorText: calculator.calculationErrorDescription == nil ? nil : calculator.textCurrent,
+                fontSize: scaledFontSize(layout.outputFontSize, maximumScale: 1.3),
+                weight: layout.outputFontWeight
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal, layout.displayHorizontalPadding)
 
             Text(memoryText)
                 .font(.system(
@@ -900,7 +897,7 @@ private struct CalculatorLayout {
         }
     }
 
-    var outputFontWeight: Font.Weight {
+    var outputFontWeight: UIFont.Weight {
         usesCompactLandscapeSelector ? .medium : .regular
     }
 

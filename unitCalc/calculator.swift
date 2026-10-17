@@ -46,12 +46,13 @@ final class Calculator: ObservableObject {
     @Published var textCurrent = "0"           //組字中的運算元數字，或計算後的輸出數字
     @Published var textLastKey = ""            //前一個按鍵
     @Published var valueInput: Double?          //等待運算子的當前運算元的值
+    @Published private(set) var inputDisplayText: String? // nil means an evaluated result, not an input
     @Published private(set) var calculationErrorDescription: String?
     var valueCurrent:Double = 0    //組字中的運算元的值，或計算後的值
     var valueOperant:Double = 0    //組字完成的「前」運算元，或計算後的值作為「前」運算元
     var textOperator:String = ""   //等待「後」運算元的運算子
     var opLog:[(vOperant:Double, tOperator:String, vInput:Double?, key:String,
-                vCurrent:Double, tLastKey:String, vMemory:Double?, type:String)] = []
+                vCurrent:Double, tLastKey:String, vMemory:Double?, type:String, inputDisplayText:String?)] = []
 
     let power10:[String:Double] = [
         "十萬":100000,
@@ -84,7 +85,8 @@ final class Calculator: ObservableObject {
     }
 
     func isKeyEnabled(_ key: String) -> Bool {
-        if textCurrent.contains("."), valueInput != nil, key == "." {
+        let editingText = inputDisplayText ?? textCurrent
+        if editingText.contains("."), valueInput != nil, key == "." {
             return false
         }
         if isPowerOfTen(textLastKey), isPowerOfTen(key) || digits.contains(key) {
@@ -97,7 +99,7 @@ final class Calculator: ObservableObject {
         if valueMemory == nil, key == "mc" || key == "mr" {
             return false
         }
-        if (outputText(valueCurrent).count >= outputLength || textCurrent.count >= significantDigits),
+        if (outputText(valueCurrent).count >= outputLength || editingText.count >= significantDigits),
            valueInput != nil,
            digits.contains(key) {
             return false
@@ -121,17 +123,18 @@ final class Calculator: ObservableObject {
 
         switch key {
         case "0","1","2","3","4","5","6","7","8","9",".":
-            if valueInput == nil || textCurrent == "0" { //忽略重複的整數零
+            if valueInput == nil || (inputDisplayText ?? textCurrent) == "0" { //忽略重複的整數零
                 if key == "." {    //小數點前補零
                     textCurrent = "0."
                 } else {
                     textCurrent = key
                 }
             } else {
-                textCurrent += key
+                textCurrent = (inputDisplayText ?? textCurrent) + key
             }
             valueCurrent = (Double(textCurrent.replacingOccurrences(of: ",", with: "")) ?? 0)
             valueInput = valueCurrent
+            inputDisplayText = textCurrent
             
         case "十萬","百萬","千萬","億","十億","百億","千億","兆":
             if let vCurrent = valueInput {
@@ -141,6 +144,7 @@ final class Calculator: ObservableObject {
             }
             valueCurrent = valueInput ?? 0
             textCurrent = outputText(valueCurrent)
+            inputDisplayText = fullInputText(valueCurrent)
             
         case "+","-","*","/","=":
             if key == "=" && (valueOperant == 0 && valueCurrent == 0 || valueOperant == valueCurrent) && (textOperator == "" || textOperator == "=")  && valueInput == nil {
@@ -171,9 +175,10 @@ final class Calculator: ObservableObject {
             textCurrent = outputText(valueCurrent)
             if opBasic[textOperator] != nil || isEditing || byUser {
                 opLog.append((vOperant,(byUser ? textOperator : unitFrom),valueInput,key,
-                              valueCurrent,textLastKey,valueMemory, (byUser ? "op" : "unit")))
+                              valueCurrent,textLastKey,valueMemory, (byUser ? "op" : "unit"),inputDisplayText))
             }
             valueInput = nil
+            inputDisplayText = nil
             textOperator = key
             
 
@@ -199,9 +204,10 @@ final class Calculator: ObservableObject {
                 return
             }
             opLog.append((valueOperant,textOperator,valueInput,key,
-                          valueCurrent,textLastKey,valueMemory, "op"))
+                          valueCurrent,textLastKey,valueMemory, "op",inputDisplayText))
             valueCurrent = valueInput ?? 0
             textCurrent = outputText(valueCurrent)
+            inputDisplayText = nil
         case "ms","mc","mr":
             switch key {
             case "ms":
@@ -212,6 +218,7 @@ final class Calculator: ObservableObject {
                 valueInput = valueMemory
                 valueCurrent = valueInput ?? 0
                 textCurrent = outputText(valueCurrent)
+                inputDisplayText = fullInputText(valueCurrent)
             default:
                 break
             }
@@ -223,10 +230,11 @@ final class Calculator: ObservableObject {
                         valueCurrent = valueOperant
                         textCurrent = outputText(valueCurrent)
                         valueInput = nil
+                        inputDisplayText = nil
                         textLastKey = textOperator
                     } else {
                         opLog.append((valueOperant,textOperator,valueInput,unitFrom,
-                                      valueCurrent,textLastKey,valueMemory,"op"))
+                                      valueCurrent,textLastKey,valueMemory,"op",inputDisplayText))
                     }
                 } else if lastLog.type == "op" {
                     valueCurrent = (opStrong.contains(lastLog.key) ? lastLog.vCurrent : (lastLog.vInput ?? 0))
@@ -235,6 +243,7 @@ final class Calculator: ObservableObject {
                     textOperator = lastLog.tOperator
                     valueInput = (opStrong.contains(lastLog.key) ? lastLog.vCurrent : lastLog.vInput)
                     textLastKey = lastLog.tLastKey
+                    inputDisplayText = lastLog.inputDisplayText
                     opLog.removeLast()
                     
                     //                if byUser {
@@ -250,6 +259,7 @@ final class Calculator: ObservableObject {
                     //                }
                 }
             } else if byUser {
+                inputDisplayText = nil
                 valueInput = nil
                 valueOperant = 0
                 textOperator = ""
@@ -258,6 +268,7 @@ final class Calculator: ObservableObject {
                 textLastKey = ""
             }
         case "C":
+            inputDisplayText = nil
             calculationErrorDescription = nil
             valueInput = nil
             valueOperant = 0
@@ -284,6 +295,40 @@ final class Calculator: ObservableObject {
         
     }
     
+    /// Expand Double's shortest round-trip decimal without imposing display rounding.
+    /// This changes presentation only; it does not claim arbitrary precision arithmetic.
+    private func fullInputText(_ value: Double) -> String {
+        guard value.isFinite else { return outputText(value) }
+        let source = String(value == 0 ? 0 : value)
+        let sign = source.hasPrefix("-") ? "-" : ""
+        let unsigned = sign.isEmpty ? source : String(source.dropFirst())
+        let parts = unsigned.lowercased().components(separatedBy: "e")
+        let mantissa = parts[0].components(separatedBy: ".")
+        let exponent = parts.count > 1 ? (Int(parts[1]) ?? 0) : 0
+        let digits = mantissa.joined()
+        let point = mantissa[0].count + exponent
+        var integer: String
+        var fraction: String
+        if point <= 0 {
+            integer = "0"
+            fraction = String(repeating: "0", count: -point) + digits
+        } else if point >= digits.count {
+            integer = digits + String(repeating: "0", count: point - digits.count)
+            fraction = ""
+        } else {
+            integer = String(digits.prefix(point))
+            fraction = String(digits.dropFirst(point))
+        }
+        while fraction.last == "0" { fraction.removeLast() }
+        var groups: [String] = []
+        while integer.count > 3 {
+            groups.insert(String(integer.suffix(3)), at: 0)
+            integer.removeLast(3)
+        }
+        groups.insert(integer, at: 0)
+        return sign + groups.joined(separator: ",") + (fraction.isEmpty ? "" : "." + fraction)
+    }
+
     func outputText(_ value:Double) -> String {
         guard value.isFinite else { return "錯誤" }
 
@@ -304,6 +349,7 @@ final class Calculator: ObservableObject {
     }
 
     private func showCalculationError(_ message: String) {
+        inputDisplayText = nil
         calculationErrorDescription = message
         textCurrent = "錯誤"
         valueInput = nil
@@ -315,6 +361,7 @@ final class Calculator: ObservableObject {
     }
 
     private func prepareForNewInputAfterError() {
+        inputDisplayText = nil
         calculationErrorDescription = nil
         textCurrent = "0"
         valueInput = nil
@@ -468,7 +515,7 @@ final class Calculator: ObservableObject {
                         textOperator = unitFrom
                         valueInput = (valueCurrent * factor0 / factor1)
                         opLog.append((valueOperant,unitFrom,valueInput,unit,
-                                      valueCurrent,textLastKey,valueMemory,"unit"))
+                                      valueCurrent,textLastKey,valueMemory,"unit",inputDisplayText))
                         valueCurrent = valueInput ?? 0
                         textCurrent = outputText(valueCurrent)
                         textOperator = ""
@@ -489,10 +536,11 @@ final class Calculator: ObservableObject {
                         logCurrencyTime = t
                     }
                     opLog.append((valueOperant,catFrom,valueInput,k,
-                                  valueCurrent,textLastKey,valueMemory,"cat"))
+                                  valueCurrent,textLastKey,valueMemory,"cat",inputDisplayText))
                     textOperator = unit
                 }
                 valueInput = nil
+                inputDisplayText = nil
             }
         }
         

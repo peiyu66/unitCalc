@@ -1,4 +1,4 @@
-# unitCalc
+<h1 id="unitcalc"><img src="docs/images/app-icon.png" width="64" height="64" alt="" style="vertical-align: middle; margin-right: .9rem; border-radius: 15px;"> unitCalc</h1>
 
 unitCalc（小確幸度量計算機）是一款適用於 iPhone 與 iPad 的計算及單位換算 App，提供基本運算、記憶功能，以及台灣常用度量單位與貨幣換算。需要 iOS／iPadOS 15 或以上版本。
 
